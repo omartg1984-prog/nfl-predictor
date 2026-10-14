@@ -18,7 +18,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Instalar libreria de cifrado
+        run: pip install cryptography
       - name: Descargar datos y recalcular predicciones
+        env:
+          NFL_PASSWORD: ${{ secrets.NFL_PASSWORD }}
         run: python nfl_predictor.py
       - name: Guardar datos
         run: |

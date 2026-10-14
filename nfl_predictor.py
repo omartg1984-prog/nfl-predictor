@@ -535,6 +535,33 @@ def next_run(now):
     return min(cands)
 
 
+# ------------------------------------------------------------ contrasena ---
+
+PASSWORD_FILE = os.path.join(BASE, "password.txt")
+PBKDF2_ITER = 250_000
+
+
+def get_password():
+    """Contrasena del sitio: variable NFL_PASSWORD (GitHub) o archivo password.txt (local)."""
+    p = os.environ.get("NFL_PASSWORD", "").strip()
+    if not p and os.path.exists(PASSWORD_FILE):
+        with open(PASSWORD_FILE, encoding="utf-8") as f:
+            p = f.read().strip()
+    return p or None
+
+
+def encrypt(text, password):
+    """AES-256-GCM con llave derivada por PBKDF2-SHA256 (compatible con WebCrypto del navegador)."""
+    import base64
+    import hashlib
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    salt, iv = os.urandom(16), os.urandom(12)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITER, dklen=32)
+    data = AESGCM(key).encrypt(iv, text.encode("utf-8"), None)
+    b = lambda x: base64.b64encode(x).decode("ascii")
+    return {"salt": b(salt), "iv": b(iv), "iter": PBKDF2_ITER, "data": b(data)}
+
+
 # ------------------------------------------------------------------- main ---
 
 def main():
@@ -623,11 +650,17 @@ def main():
                    "elo_k": ELO_K, "elo_hfa": ELO_HFA, "pyth_exp": PYTH_EXP},
     }
     os.makedirs(DATA_DIR, exist_ok=True)
+    password = get_password()
     with open(OUT_FILE + ".tmp", "w", encoding="utf-8") as f:
-        f.write("window.NFL_DATA = ")
-        json.dump(out, f, ensure_ascii=False)
+        if password:
+            f.write("window.NFL_ENC = ")
+            json.dump(encrypt(json.dumps(out, ensure_ascii=False), password), f)
+        else:
+            f.write("window.NFL_DATA = ")
+            json.dump(out, f, ensure_ascii=False)
         f.write(";\n")
     os.replace(OUT_FILE + ".tmp", OUT_FILE)
+    log("  datos cifrados con contrasena" if password else "  datos sin contrasena")
     ss = out["season_summary"]
     log(f"Listo: jornada actual = {weeks_out[-1]['label']}"
         + (f" | aciertos temporada {ss['correct']}/{ss['n']}" if ss else ""))
