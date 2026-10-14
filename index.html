@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NFL Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#013369; --navy-2:#002244; --red:#D50A0A; --silver:#A5ACAF;
+  --bg:#eef1f6; --card:#ffffff; --ink:#0f1a2b; --muted:#5b6678; --line:#dde3ec;
+  --good:#11845b; --bad:#c62828; --warn:#d98c00;
+  --head:'Oswald',Impact,'Arial Narrow',sans-serif; --body:'Inter',Segoe UI,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px}
+header{background:linear-gradient(135deg,var(--navy-2),var(--navy) 60%,#0b4a94);color:#fff;border-bottom:5px solid var(--red)}
+.wrap{max-width:1240px;margin:0 auto;padding:0 18px}
+.top{display:flex;align-items:center;gap:16px;padding:18px 0 10px;flex-wrap:wrap}
+.shield{width:54px;height:62px;flex:none}
+h1{font-family:var(--head);font-size:34px;letter-spacing:1.5px;margin:0;line-height:1}
+h1 span{color:var(--red);text-shadow:0 0 1px #fff}
+.sub{color:#c9d6ea;font-size:13px;margin-top:4px}
+.upd{margin-left:auto;text-align:right;font-size:12.5px;color:#c9d6ea;line-height:1.5}
+.upd b{color:#fff}
+nav{display:flex;gap:4px;overflow-x:auto}
+nav button{font-family:var(--head);font-size:16px;letter-spacing:1px;text-transform:uppercase;background:none;border:0;color:#c9d6ea;padding:12px 18px;cursor:pointer;border-bottom:4px solid transparent;margin-bottom:-5px;white-space:nowrap}
+nav button.on{color:#fff;border-bottom-color:#fff}
+nav button:hover{color:#fff}
+main{padding:22px 0 60px}
+.tab{display:none}.tab.on{display:block}
+
+/* week chips */
+.weeks{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px}
+.chip{flex:none;border:2px solid var(--navy);background:#fff;color:var(--navy);font-family:var(--head);font-size:15px;letter-spacing:.5px;padding:7px 14px;border-radius:999px;cursor:pointer;position:relative}
+.chip.on{background:var(--navy);color:#fff}
+.chip .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle}
+.weekhead{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+.weekhead h2{font-family:var(--head);font-size:30px;margin:0;color:var(--navy);letter-spacing:.5px}
+.weekhead .meta{color:var(--muted);font-size:13.5px}
+.tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13.5px}
+select,.tgl{font:inherit;border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 10px;color:var(--ink)}
+.tgl{cursor:pointer;user-select:none}
+.tgl.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.banner{background:#fff;border-left:5px solid var(--red);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;gap:26px;flex-wrap:wrap;box-shadow:0 1px 3px #0001}
+.banner[hidden]{display:none}
+.banner div{font-size:13px;color:var(--muted)}
+.banner b{display:block;font-family:var(--head);font-size:24px;color:var(--navy)}
+.bye{color:var(--muted);font-size:13px;margin:-6px 0 14px}
+
+/* game cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
+.game{background:var(--card);border-radius:14px;box-shadow:0 1px 3px #0002,0 6px 18px #01336910;overflow:hidden;display:flex;flex-direction:column}
+.ghead{display:flex;justify-content:space-between;gap:8px;padding:9px 14px;background:#f6f8fb;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+.ghead .live{color:var(--red);font-weight:700}
+.team{display:grid;grid-template-columns:44px 1fr auto auto;align-items:center;gap:10px;padding:10px 14px}
+.team img{width:44px;height:44px;object-fit:contain}
+.tname{font-weight:700;font-size:15.5px;line-height:1.15}
+.tname small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+.ppts{font-family:var(--head);font-size:30px;color:var(--navy);min-width:52px;text-align:right}
+.ppts.win{color:var(--red)}
+.real{font-family:var(--head);font-size:15px;color:var(--muted);min-width:46px;text-align:right}
+.real b{font-size:22px;color:var(--ink)}
+.team.loser .tname,.team.loser img{opacity:.55}
+.bar{display:flex;height:10px;margin:2px 14px 0;border-radius:999px;overflow:hidden;background:#ddd}
+.bar span{display:block;height:100%}
+.barlbl{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:3px 14px 0}
+.verdict{margin:10px 14px 0;padding:9px 12px;background:#f2f5fa;border-radius:10px;font-size:13.5px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.verdict b{color:var(--navy)}
+.badge{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;padding:3px 10px;border-radius:999px;color:#fff;letter-spacing:.3px}
+.badge.Alta{background:var(--good)}.badge.Media{background:var(--warn)}.badge.Baja{background:#7a8496}
+.meter{display:inline-block;width:52px;height:6px;background:#ffffff55;border-radius:3px;overflow:hidden}
+.meter i{display:block;height:100%;background:#fff}
+.res{margin:10px 14px 0;padding:8px 12px;border-radius:10px;font-weight:700;font-size:13.5px}
+.res.ok{background:#e3f4ec;color:var(--good)}.res.no{background:#fde8e8;color:var(--bad)}.res.tie{background:#eee;color:#555}
+.vegas{font-size:12.5px;color:var(--muted);padding:8px 14px 0}
+details{margin:10px 14px 14px;border-top:1px dashed var(--line);padding-top:8px}
+summary{cursor:pointer;color:var(--navy);font-weight:600;font-size:13px}
+.mt{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+.mt th,.mt td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:right}
+.mt th:first-child,.mt td:first-child{text-align:left}
+.mt th{color:var(--muted);font-weight:600}
+.formula{background:#f6f8fb;border-radius:8px;padding:8px 10px;font-size:12.5px;margin-top:8px;line-height:1.6}
+.formula code{font-family:Consolas,monospace;font-size:12px}
+.spacer{flex:1}
+.cpts{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:var(--red);color:#fff;font-family:var(--head);font-size:21px;line-height:1;box-shadow:0 2px 6px #d50a0a55;flex:none}
+.cpts small{font-size:9px;font-family:var(--body);font-weight:600;letter-spacing:.5px}
+.ghead{align-items:center}
+.ghead .gl{display:flex;flex-direction:column;gap:2px}
+.info{margin:8px 14px 0;font-size:12.5px;color:var(--muted);line-height:1.55}
+.info .adj{color:var(--bad);font-weight:600}
+.info .man{color:#6a1b9a;font-weight:600}
+.injl{font-size:12px;margin-top:6px;line-height:1.5}
+.injl b{color:var(--ink)}
+.st-Out{color:var(--bad);font-weight:700}.st-Doubtful{color:#e65100;font-weight:700}.st-Questionable{color:var(--warn);font-weight:600}
+.manual{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12.5px}
+.manual input{width:64px;font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6px}
+.manual button{font:inherit;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 8px;cursor:pointer}
+/* pick'em */
+.pk-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;font-size:13.5px}
+.btn{font:inherit;font-weight:600;border:1px solid var(--navy);color:var(--navy);background:#fff;border-radius:8px;padding:8px 14px;cursor:pointer}
+.btn:hover{background:#eef3fb}
+.btn.wa{background:#25D366;border-color:#1da851;color:#fff}
+.btn.wa:hover{background:#1ebe5a}
+.pk-sheet{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px #0002;max-width:760px}
+.pk-head{background:linear-gradient(135deg,var(--navy-2),var(--navy));color:#fff;padding:14px 18px;border-bottom:4px solid var(--red);display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.pk-head h3{font-family:var(--head);font-size:26px;margin:0;letter-spacing:1px}
+.pk-head small{color:#c9d6ea;font-size:12px}
+.pk-head .sc{font-family:var(--head);font-size:20px;text-align:right}
+.pk-day{background:#f3f5f9;color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.3px;text-transform:uppercase;padding:4px 18px 0}
+.pk-day + .pk-row{padding-top:4px}
+.pk-row{display:grid;grid-template-columns:1fr 26px 1fr 54px;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line)}
+.pk-team{display:flex;align-items:center;gap:8px;border:2px solid var(--line);border-radius:10px;padding:6px 10px;cursor:pointer;background:#fff;font:inherit;font-weight:600;font-size:14px;color:var(--ink);text-align:left;min-width:0}
+.pk-team img{width:30px;height:30px;flex:none}
+.pk-team span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk-team em{margin-left:auto;font-style:normal;font-size:11.5px;color:var(--muted);font-weight:500}
+.pk-team.sel{background:var(--navy);border-color:var(--navy);color:#fff}
+.pk-team.sel em{color:#c9d6ea}
+.pk-team.sel.ok{background:var(--good);border-color:var(--good)}
+.pk-team.sel.no{background:var(--bad);border-color:var(--bad)}
+.pk-team.ovr{box-shadow:0 0 0 3px #6a1b9a55}
+.pk-at{text-align:center;color:var(--muted);font-weight:700}
+.pk-pts{font-family:var(--head);font-size:22px;color:#fff;background:var(--red);border-radius:10px;text-align:center;padding:4px 0}
+.pk-pts.lost{background:#9aa3b2;text-decoration:line-through}
+.pk-prob{grid-column:1 / 4;display:grid;grid-template-columns:38px 1fr 38px;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--muted);margin-top:-2px}
+.pk-prob span:last-child{text-align:right}
+.pk-prob .fav{color:var(--navy);font-weight:800}
+.pk-bar{position:relative;display:flex;height:8px;border-radius:999px;overflow:hidden;background:#e6eaf1}
+.pk-bar i{display:block;height:100%}
+.pk-bar b{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;transform:translateX(-1px)}
+.pk-tb{padding:12px 18px;font-size:14px;display:flex;justify-content:space-between;background:#f6f8fb}
+.pk-tb b{font-family:var(--head);font-size:20px;color:var(--navy)}
+@media (max-width:640px){.pk-row{grid-template-columns:1fr 18px 1fr 44px;padding:8px}.pk-team em{display:none}.pk-team{padding:5px 6px;font-size:13px}}
+.adjflag{display:inline-block;background:#6a1b9a;color:#fff;border-radius:6px;font-size:10.5px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+
+/* tables */
+.card{background:#fff;border-radius:14px;box-shadow:0 1px 3px #0002;padding:18px;margin-bottom:18px}
+.card h3{font-family:var(--head);color:var(--navy);margin:0 0 12px;font-size:22px;letter-spacing:.5px}
+.tscroll{overflow-x:auto}
+table.st{border-collapse:collapse;width:100%;font-size:13.5px;white-space:nowrap}
+table.st th{background:var(--navy);color:#fff;font-weight:600;padding:9px 8px;cursor:pointer;position:sticky;top:0;text-align:right;font-size:12.5px}
+table.st th:first-child,table.st td:first-child{text-align:left}
+table.st th.sorted{background:var(--red)}
+table.st td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}
+table.st tr:nth-child(even) td{background:#f8fafc}
+table.st td.tm{display:flex;align-items:center;gap:8px;font-weight:600}
+table.st td.tm img{width:26px;height:26px}
+.hi{color:var(--good);font-weight:700}.lo{color:var(--bad);font-weight:700}
+.hint{color:var(--muted);font-size:12.5px;margin:6px 0 0}
+
+/* accuracy */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:18px}
+.tile{background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 3px #0002;border-top:5px solid var(--navy)}
+.tile.r{border-top-color:var(--red)}
+.tile .v{font-family:var(--head);font-size:38px;color:var(--navy);line-height:1.1}
+.tile .l{color:var(--muted);font-size:13px}
+.hbar{display:grid;grid-template-columns:230px 1fr 70px;gap:10px;align-items:center;margin:8px 0;font-size:13.5px}
+.hbar .track{background:#e6eaf1;border-radius:6px;height:16px;overflow:hidden}
+.hbar .track i{display:block;height:100%;background:var(--navy);border-radius:6px}
+.hbar.best .track i{background:var(--red)}
+.how p,.how li{line-height:1.6}
+.how .eq{background:var(--navy);color:#fff;border-radius:10px;padding:12px 16px;font-family:Consolas,monospace;font-size:13.5px;margin:10px 0;overflow-x:auto;white-space:pre}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+@media (max-width:640px){
+  h1{font-size:26px}.upd{margin-left:0;text-align:left}
+  .grid{grid-template-columns:1fr}.hbar{grid-template-columns:120px 1fr 56px}
+  .wrap{padding:0 12px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <svg class="shield" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 L52 8 V30 C52 46 40 56 27 60 C14 56 2 46 2 30 V8 Z" fill="#fff"/><path d="M27 6 L48 11 V30 C48 43 38 52 27 56 C16 52 6 43 6 30 V11 Z" fill="#013369"/><path d="M6 18 H48 V24 H6 Z" fill="#D50A0A"/><ellipse cx="27" cy="38" rx="11" ry="7" fill="#8b4513" transform="rotate(-25 27 38)"/><path d="M21 38 H33 M24 36 V40 M27 35.5 V40.5 M30 36 V40" stroke="#fff" stroke-width="1.2" transform="rotate(-25 27 38)"/></svg>
+      <div>
+        <h1>NFL <span>PREDICTOR</span> <span id="season" style="color:#fff"></span></h1>
+        <div class="sub">Predicciones por jornada con estadísticas actualizadas de la liga</div>
+      </div>
+      <div class="upd" id="upd"></div>
+    </div>
+    <nav>
+      <button data-tab="pred" class="on">Predicciones</button>
+      <button data-tab="picks">Mis Picks</button>
+      <button data-tab="teams">Equipos</button>
+      <button data-tab="acc">Precisión</button>
+      <button data-tab="how">Cómo funciona</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="tab on" id="tab-pred">
+    <div class="weeks" id="weeks"></div>
+    <div class="weekhead">
+      <div><h2 id="wtitle"></h2><div class="meta" id="wmeta"></div></div>
+      <div class="tools">
+        <label>Modelo:
+          <select id="model">
+            <option value="cons">Consenso (los 4 combinados)</option>
+            <option value="ppp">Puntos por jugada (tu fórmula)</option>
+            <option value="srs">SRS ajustado por rival</option>
+            <option value="elo">Elo</option>
+            <option value="pyth">Pitagórico</option>
+          </select>
+        </label>
+        <label>Ordenar:
+          <select id="sort">
+            <option value="pts">Puntos de confianza (16→1)</option>
+            <option value="date">Fecha</option>
+            <option value="cert">Certidumbre</option>
+          </select>
+        </label>
+        <span class="tgl on" id="autoAdj" title="Ajustes por QB titular lesionado y clima, con datos de ESPN">Ajustes lesiones/clima: Sí</span>
+        <span class="tgl" id="onlyHigh">Solo certidumbre alta</span>
+      </div>
+    </div>
+    <div class="banner" id="wbanner" hidden></div>
+    <div class="bye" id="bye"></div>
+    <div class="grid" id="games"></div>
+  </section>
+
+  <section class="tab" id="tab-picks">
+    <div class="pk-tools">
+      <label>Jornada: <select id="pkWeek"></select></label>
+      <span class="hint" style="margin:0" id="pkModel"></span>
+      <span class="spacer"></span>
+      <button class="btn wa" id="pkWa">Enviar por WhatsApp</button>
+      <button class="btn" id="pkImg">Descargar imagen</button>
+      <button class="btn" id="pkCopy">Copiar texto</button>
+    </div>
+    <div class="pk-sheet" id="pkSheet"></div>
+    <p class="hint">Toca el otro equipo para cambiar el pick; tu cambio se guarda en este navegador. Los puntos de confianza vienen del modelo que elegiste en Predicciones. <b>Enviar por WhatsApp</b> abre WhatsApp con tus picks en texto. <b>Descargar imagen</b> guarda la hoja como foto para mandarla por WhatsApp; en el celular se abre directo el menú para compartir.</p>
+  </section>
+
+  <section class="tab" id="tab-teams">
+    <div class="card">
+      <h3>Estadísticas de la temporada</h3>
+      <div class="tscroll"><table class="st" id="tteams"></table></div>
+      <p class="hint">Haz clic en cualquier columna para ordenar. Verde = top 5 de la liga, rojo = últimos 5. PPP = puntos por jugada.</p>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-acc"></section>
+
+  <section class="tab how" id="tab-how">
+    <div class="card">
+      <h3>1. Tu fórmula: puntos por jugada (PPP)</h3>
+      <p>Para cada equipo se calcula lo que su <b>ofensiva</b> suele anotar y lo que la <b>defensiva del rival</b> suele permitir, y se promedian:</p>
+      <div class="eq">Ofensiva  = Puntos anotados por jugada  × Jugadas ofensivas por partido
+Defensiva = Puntos permitidos por jugada × Jugadas del rival por partido
+
+Puntos esperados del equipo A = ( Ofensiva de A + Defensiva de B ) / 2</div>
+      <p id="howExample"></p>
+    </div>
+    <div class="card">
+      <h3>2. SRS – ajustado por calendario</h3>
+      <p>El <i>Simple Rating System</i> corrige los promedios según la calidad de los rivales: anotar 30 puntos contra la mejor defensiva vale más que contra la peor. Cada equipo recibe un rating ofensivo y uno defensivo, y el marcador esperado es <code>promedio de liga + ofensiva propia + debilidad defensiva del rival</code>.</p>
+    </div>
+    <div class="card">
+      <h3>3. Elo</h3>
+      <p>Sistema de ranking (el de ajedrez, adaptado por FiveThirtyEight a la NFL). Cada equipo gana o pierde puntos después de cada partido según el resultado, el margen y qué tan sorpresivo fue. Arrastra información de las 2 temporadas anteriores (con regresión a la media), por eso es el modelo principal en las primeras semanas. 25 puntos Elo ≈ 1 punto de margen.</p>
+    </div>
+    <div class="card">
+      <h3>4. Expectativa pitagórica</h3>
+      <p>Estima qué % de partidos "debería" ganar un equipo según puntos anotados y permitidos (<code>PF<sup>2.37</sup> / (PF<sup>2.37</sup> + PA<sup>2.37</sup>)</code>). Es mejor predictor que el récord porque los partidos cerrados tienen mucho de suerte. Dos equipos se comparan con la fórmula <i>log5</i>.</p>
+    </div>
+    <div class="card">
+      <h3>Consenso, local y certidumbre</h3>
+      <ul>
+        <li><b>Consenso:</b> promedio ponderado de los 4 modelos (PPP 25%, SRS 30%, Elo 30%, Pitagórico 15%). Durante las primeras 4 semanas, cuando aún hay pocos datos, el Elo pesa más.</li>
+        <li><b>Ventaja de local:</b> +<span class="p-hfa"></span> puntos al local (0 en sede neutral, como los partidos internacionales).</li>
+        <li><b>Probabilidad de ganar:</b> el margen esperado se convierte a probabilidad con una curva normal (desviación de <span class="p-sigma"></span> puntos, la variabilidad típica de un partido NFL). Ej.: favorito por 3 ≈ 59%, por 7 ≈ 70%, por 10 ≈ 77%.</li>
+        <li><b>Suavizado:</b> se suman <span class="p-prior"></span> "partidos fantasma" con el promedio de la liga para que un equipo con 1 o 2 juegos atípicos no produzca predicciones exageradas.</li>
+        <li><b>Certidumbre (0–100):</b> combina 1) qué tan amplio es el margen esperado (45%), 2) cuántos de los 4 modelos coinciden en el ganador (35%) y 3) cuántas jornadas de datos hay (20%), con una penalización si los modelos difieren mucho entre sí. <b>Alta</b> ≥ 70, <b>Media</b> 50–69, <b>Baja</b> &lt; 50. En la pestaña Precisión puedes comprobar si los niveles altos de verdad aciertan más.</li>
+        <li><b>Puntos de confianza (16 → 1):</b> en modo Consenso, cada partido recibe un puntaje igual al <i>promedio de la probabilidad de que gane el favorito según los 4 modelos</i>. Si los 4 modelos lo ven claro, el puntaje es alto. Si el partido está parejo o los modelos no coinciden, es bajo. El más seguro recibe 16, el siguiente 15, y así hasta acabar los partidos. Si eliges un solo modelo, se ordena por la probabilidad de ese modelo.</li>
+        <li><b>Sin ventaja de información:</b> cada jornada se predice usando solo partidos anteriores a ella, así las semanas pasadas muestran lo que el modelo habría dicho en su momento.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Lesiones, clima y cambios de QB</h3>
+      <p><b>Automático (datos de ESPN, solo para la jornada en curso):</b></p>
+      <ul>
+        <li><b>QB titular</b> (el líder de yardas por pase del equipo) en el reporte de lesiones: <b>Fuera −5</b>, <b>Dudoso −3.5</b>, <b>En duda −1</b> puntos a su equipo. Cambiar de titular a suplente vale típicamente de 3 a 7 puntos.</li>
+        <li><b>Clima</b> (solo estadios abiertos): ráfagas ≥ 29 km/h −2 al total y ≥ 40 km/h −4; lluvia o nieve probable −1 a −2; frío extremo (≤ −7 °C) −1.5. El clima afecta sobre todo el total de puntos, no tanto quién gana.</li>
+        <li>Los jugadores en la lista de lesionados de largo plazo (IR) no se ajustan porque su ausencia ya se refleja en las estadísticas.</li>
+      </ul>
+      <p><b>Manual:</b> en cada partido abre "Ver modelos, lesiones y ajustes" y suma o resta puntos a cualquier equipo. Por ejemplo: QB suplente confirmado −5, receptor o pass rusher estrella fuera −1 a −2, varios titulares de la línea ofensiva fuera −1.5, viaje corto con descanso extra +1. Tus ajustes se guardan en este navegador y se aplican a todos los modelos.</p>
+      <p class="hint">Limitaciones: el reporte del martes es preliminar. El reporte oficial sale el viernes y los inactivos 90 minutos antes del partido, por eso también hay actualizaciones el jueves y el domingo temprano. Si un QB lleva varias semanas fuera y ya no es el líder de pases, el ajuste no aplica. La línea de Las Vegas es buena referencia porque incorpora toda esta información.</p>
+    </div>
+    <div class="card">
+      <h3>Actualización automática</h3>
+      <p>Las estadísticas se recalculan cada <b>martes a las 3:00 a.m.</b>, después del Monday Night Football. El <b>jueves a las 2 p.m.</b> y el <b>domingo a las 9 a.m.</b> solo se refrescan las lesiones y el clima; las estadísticas no cambian. Si la computadora estaba apagada a esa hora, la actualización corre en cuanto se encienda. También puedes actualizar manualmente con <code>Actualizar ahora.bat</code> y luego recargar esta página (F5).</p>
+    </div>
+  </section>
+</main>
+
+<script src="data/nfl_data.js"></script>
+<script>
+const D = window.NFL_DATA;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '—';
+const fx = (v, d = 1) => v == null ? '—' : Number(v).toFixed(d);
+const store = {get(k){try{return localStorage.getItem(k)}catch{return null}}, set(k,v){try{localStorage.setItem(k,v)}catch{}}};
+
+if (!D) {
+  document.querySelector('main').innerHTML = '<div class="empty"><h2>No hay datos todavía</h2>Ejecuta <b>Actualizar ahora.bat</b> y recarga la página.</div>';
+  throw new Error('sin datos');
+}
+
+const MODEL_NAMES = {ppp:'Puntos por jugada (tu fórmula)', srs:'SRS ajustado por rival', elo:'Elo', pyth:'Pitagórico'};
+const dt = new Date(D.generated), nx = new Date(D.next_update);
+const fmtDate = (d, o) => d.toLocaleString('es-MX', o);
+$('#season').textContent = D.season;
+$('#upd').innerHTML = `Última actualización: <b>${fmtDate(dt,{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</b><br>Próxima: <b>${fmtDate(nx,{weekday:'long',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</b>`;
+document.querySelectorAll('.p-hfa').forEach(e => e.textContent = D.params.hfa);
+document.querySelectorAll('.p-sigma').forEach(e => e.textContent = D.params.sigma);
+document.querySelectorAll('.p-prior').forEach(e => e.textContent = D.params.prior_games);
+
+// ---------- tabs ----------
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
+  store.set('tab', b.dataset.tab);
+});
+const savedTab = store.get('tab');
+if (savedTab) document.querySelector(`nav button[data-tab="${savedTab}"]`)?.click();
+
+// ---------- colors ----------
+function hex2rgb(h){h=(h||'777777').replace('#','');return [0,2,4].map(i=>parseInt(h.substr(i,2),16))}
+function dist(a,b){const x=hex2rgb(a),y=hex2rgb(b);return Math.hypot(x[0]-y[0],x[1]-y[1],x[2]-y[2])}
+function barColors(g){
+  const T = D.teams; let h = T[g.home.abbr]?.color || '013369', a = T[g.away.abbr]?.color || 'D50A0A';
+  if (dist(h, a) < 90) a = T[g.away.abbr]?.alt || 'A5ACAF';
+  const light = c => { const [r, g2, b] = hex2rgb(c); return (0.299*r + 0.587*g2 + 0.114*b) > 215; };
+  if (dist(h, a) < 90 || light(a)) a = 'A5ACAF';
+  if (light(h)) h = '013369';
+  return ['#' + h, '#' + a];
+}
+
+// ---------- predictions ----------
+let curKey = Number(store.get('week')) || D.current_key;
+if (!D.weeks.some(w => w.key === curKey)) curKey = D.current_key;
+let onlyHigh = false;
+let useAuto = store.get('autoAdj') !== '0';
+let model = store.get('model') || 'cons';
+$('#model').value = model;
+$('#sort').value = store.get('sort') || 'pts';
+const SIG = D.params.sigma;
+
+function Phi(x){ // CDF normal estandar
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989423 * Math.exp(-x * x / 2);
+  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return x > 0 ? 1 - p : p;
+}
+function getMan(id){ try { return JSON.parse(store.get('adj_' + id)) || {h:0, a:0}; } catch { return {h:0, a:0}; } }
+function setMan(id, v){ store.set('adj_' + id, JSON.stringify(v)); }
+
+// Calcula la prediccion mostrada segun el modelo elegido + ajustes
+function view(g){
+  const p = g.pred, man = getMan(g.id), H = g.home.abbr, A = g.away.abbr;
+  const dh = (man.h || 0) - (useAuto ? 0 : p.adj.home), da = (man.a || 0) - (useAuto ? 0 : p.adj.away);
+  const dm = dh - da, dt = dh + da;
+  const models = p.models.map(m => ({...m, margin: m.margin + dm,
+    hs: m.hs != null ? m.hs + dh : null, as: m.as != null ? m.as + da : null}));
+  models.forEach(m => { m.prob_home = Phi(m.margin / SIG); m.pick = m.margin >= 0 ? H : A; });
+  let margin, total;
+  if (model === 'cons') { margin = p.margin + dm; total = p.total + dt; }
+  else { const m = models.find(x => x.key === model); margin = m.margin; total = m.hs != null ? m.hs + m.as : p.total + dt; }
+  const prob_home = Phi(margin / SIG), pick = margin >= 0 ? H : A;
+  const agree = models.filter(m => m.pick === pick).length / models.length;
+  const mean = models.reduce((s, m) => s + m.margin, 0) / models.length;
+  const spread = Math.sqrt(models.reduce((s, m) => s + (m.margin - mean) ** 2, 0) / models.length);
+  let cert = 100 * (0.45 * Math.min(1, Math.abs(margin) / 10) + 0.35 * agree + 0.20 * Math.min(1, p.sample / 8)) - Math.min(10, spread);
+  cert = Math.max(1, Math.min(99, Math.round(cert)));
+  const level = cert >= 70 ? 'Alta' : cert >= 50 ? 'Media' : 'Baja';
+  const pPick = m => pick === H ? m.prob_home : 1 - m.prob_home;
+  const score = model === 'cons' ? models.reduce((s, m) => s + pPick(m), 0) / models.length : Math.max(prob_home, 1 - prob_home);
+  let result = null;
+  if (g.final) {
+    const real = g.hs - g.as;
+    result = real === 0 ? {tie: true} : {correct: (real > 0 ? H : A) === pick, err: Math.abs(margin - real)};
+  }
+  return {margin, total, hs: (total + margin) / 2, as: (total - margin) / 2, prob_home, pick, cert, level,
+          score, models, man, result, manual: !!(man.h || man.a)};
+}
+
+// Asigna 16, 15, 14... de mayor a menor confianza
+function weekViews(w){
+  const vs = w.games.map(g => ({g, v: view(g)}));
+  [...vs].sort((a, b) => b.v.score - a.v.score || Math.abs(b.v.margin) - Math.abs(a.v.margin))
+    .forEach((x, i) => x.v.pts = Math.max(1, 16 - i));
+  return vs;
+}
+function weekSummary(vs){
+  const done = vs.filter(x => x.v.result && !x.v.result.tie);
+  if (!done.length) return null;
+  return {n: done.length, correct: done.filter(x => x.v.result.correct).length,
+    mae: done.reduce((s, x) => s + x.v.result.err, 0) / done.length,
+    pts: done.filter(x => x.v.result.correct).reduce((s, x) => s + x.v.pts, 0),
+    ptsMax: done.reduce((s, x) => s + x.v.pts, 0)};
+}
+
+function renderWeeks(){
+  $('#weeks').innerHTML = D.weeks.map(w =>
+    `<button class="chip ${w.key===curKey?'on':''}" data-k="${w.key}">${esc(w.label)}${w.key===D.current_key?'<span class="dot" title="Jornada actual"></span>':''}</button>`).join('');
+  document.querySelectorAll('.chip').forEach(c => c.onclick = () => {curKey = pkKey = +c.dataset.k; store.set('week', curKey); renderWeek();});
+  document.querySelector('.chip.on')?.scrollIntoView({inline:'center', block:'nearest'});
+}
+
+const ST_ES = {Out:'Fuera', Doubtful:'Dudoso', Questionable:'En duda'};
+function injuryHtml(g){
+  const ex = g.extra; if (!ex || !ex.injuries) return '';
+  return ['away','home'].map(s => {
+    const ab = g[s].abbr, list = (ex.injuries[ab] || []);
+    const qb = ex.qb?.[ab];
+    if (!list.length) return `<div class="injl"><b>${ab}:</b> sin lesionados reportados</div>`;
+    return `<div class="injl"><b>${ab}</b>${qb ? ` (QB titular: ${esc(qb)})` : ''}: ` +
+      list.map(p => `${esc(p.name)} <small>${esc(p.pos||'')}</small> <span class="st-${p.status}">${ST_ES[p.status]||p.status}</span>`).join(' · ') + '</div>';
+  }).join('');
+}
+function weatherHtml(g){
+  if (g.indoor) return '🏟️ Estadio techado: el clima no influye';
+  const w = g.extra?.weather; if (!w) return '';
+  const parts = [];
+  if (w.temp != null) parts.push(`🌡️ ${Math.round((w.temp - 32) / 1.8)}°C`);
+  if (w.gust != null) parts.push(`💨 ráfagas ${Math.round(w.gust * 1.609)} km/h`);
+  if (w.precip != null) parts.push(`🌧️ ${w.precip}% lluvia`);
+  return parts.join(' · ');
+}
+
+function gameCard({g, v}){
+  const p = g.pred, T = D.teams, [hc, ac] = barColors(g);
+  const fin = g.final, st = g.state, H = g.home.abbr, A = g.away.abbr;
+  const when = fmtDate(new Date(g.date), {weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit'});
+  const status = fin ? 'Final' : st === 'in' ? `<span class="live">● EN VIVO ${esc(g.detail)}</span>` : when;
+  const realWinner = fin ? (g.hs > g.as ? 'home' : g.hs < g.as ? 'away' : null) : null;
+  const row = (side) => {
+    const t = g[side], isH = side === 'home';
+    const pts = isH ? v.hs : v.as, rec = isH ? p.rec_home : p.rec_away;
+    return `<div class="team ${fin && realWinner && realWinner!==side ? 'loser':''}">
+      <img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+      <div class="tname">${esc(t.name)}<small>${isH ? (g.neutral ? 'Sede neutral' : 'Local') : 'Visitante'} · ${esc(rec)} antes del partido</small></div>
+      <div class="ppts ${v.pick===t.abbr?'win':''}" title="Puntos pronosticados">${Math.round(pts)}</div>
+      <div class="real">${fin ? `<b>${isH ? g.hs : g.as}</b><br>real` : ''}</div>
+    </div>`;
+  };
+  const ph = Math.round(v.prob_home * 100);
+  let res = '';
+  if (v.result) res = v.result.tie ? `<div class="res tie">Empate ${g.hs}-${g.as}</div>`
+    : `<div class="res ${v.result.correct?'ok':'no'}">${v.result.correct ? `✓ Acertó · +${v.pts} pts` : `✗ Falló · 0 de ${v.pts} pts`} · error en el margen: ${fx(v.result.err)}</div>`;
+  const ex = g.extra || {};
+  const notes = useAuto ? p.adj.notes : [];
+  const refs = [];
+  if (g.odds) refs.push(`Las Vegas: <b>${esc(g.odds)}</b>${g.ou ? ` · O/U ${esc(g.ou)}` : ''}`);
+  if (ex.fpi_home != null) refs.push(`ESPN FPI: ${ex.fpi_home >= ex.fpi_away ? H + ' ' + fx(ex.fpi_home,0) : A + ' ' + fx(ex.fpi_away,0)}%`);
+  const wx = weatherHtml(g);
+  const models = v.models.map(m => `<tr ${m.key===model?'style="background:#eef3fb;font-weight:600"':''}><td>${esc(MODEL_NAMES[m.key])}</td>
+      <td>${m.hs!=null ? `${A} ${fx(m.as)} – ${fx(m.hs)} ${H}` : '—'}</td>
+      <td>${esc(m.pick)} por ${fx(Math.abs(m.margin))}</td><td>${Math.round(Math.max(m.prob_home,1-m.prob_home)*100)}%</td>
+      <td>${Math.round(m.weight*100)}%</td></tr>`).join('');
+  const ip = p.inputs;
+  return `<article class="game">
+    <div class="ghead"><div class="gl"><span>${status}</span><span>${esc(g.tv || '')}</span></div>
+      <span class="cpts" title="Puntos de confianza: 16 = el más seguro de la jornada">${v.pts}<small>PTS</small></span></div>
+    ${row('away')}${row('home')}
+    <div class="bar"><span style="width:${100-ph}%;background:${ac}"></span><span style="width:${ph}%;background:${hc}"></span></div>
+    <div class="barlbl"><span>${A} ${100-ph}%</span><span>Probabilidad de ganar</span><span>${ph}% ${H}</span></div>
+    <div class="verdict">
+      <span>Pronóstico: <b>${esc(T[v.pick]?.short || v.pick)}</b> por ${fx(Math.abs(v.margin))} · Total ${fx(v.total)}${v.manual ? '<span class="adjflag">ajuste manual</span>' : ''}</span>
+      <span class="spacer"></span>
+      <span class="badge ${v.level}" title="Índice de certidumbre ${v.cert}/100">${v.level} ${v.cert} <span class="meter"><i style="width:${v.cert}%"></i></span></span>
+    </div>
+    ${res}
+    <div class="info">
+      ${notes.map(n => `<div class="adj">⚠ ${esc(n)}</div>`).join('')}
+      ${v.manual ? `<div class="man">✎ Tu ajuste: ${A} ${v.man.a>0?'+':''}${v.man.a||0}, ${H} ${v.man.h>0?'+':''}${v.man.h||0}</div>` : ''}
+      ${wx ? `<div>${wx}</div>` : ''}
+      ${refs.length ? `<div>${refs.join(' · ')}</div>` : ''}
+    </div>
+    <details><summary>Ver modelos, lesiones y ajustes</summary>
+      <table class="mt"><tr><th>Modelo</th><th>Marcador</th><th>Ganador</th><th>Prob.</th><th>Peso</th></tr>${models}</table>
+      ${ex.injuries ? `<div class="formula"><b>Reporte de lesiones</b> <small>(actualizado ${fmtDate(new Date(ex.fetched),{weekday:'short',hour:'numeric',minute:'2-digit'})})</small>${injuryHtml(g)}</div>` : ''}
+      ${!fin ? `<div class="formula"><b>Ajuste manual</b> (puntos a sumar o restar; p. ej. −5 si juega el QB suplente)
+        <div class="manual" data-id="${g.id}">
+          <label>${A} <input type="number" step="0.5" data-s="a" value="${v.man.a||0}"></label>
+          <label>${H} <input type="number" step="0.5" data-s="h" value="${v.man.h||0}"></label>
+          <button data-reset>Quitar</button>
+        </div></div>` : ''}
+      <div class="formula">
+        <b>Tu fórmula (puntos por jugada):</b><br>
+        ${H}: (<code>${fx(ip.home.off_ppp,3)} × ${fx(ip.home.plays_pg)}</code> + <code>${fx(ip.away.def_ppp,3)} × ${fx(ip.away.opp_plays_pg)}</code>) / 2
+          = (${fx(ip.h_off)} + ${fx(ip.a_def)}) / 2 = <b>${fx((ip.h_off+ip.a_def)/2)}</b><br>
+        ${A}: (<code>${fx(ip.away.off_ppp,3)} × ${fx(ip.away.plays_pg)}</code> + <code>${fx(ip.home.def_ppp,3)} × ${fx(ip.home.opp_plays_pg)}</code>) / 2
+          = (${fx(ip.a_off)} + ${fx(ip.h_def)}) / 2 = <b>${fx((ip.a_off+ip.h_def)/2)}</b><br>
+        ${ip.hfa ? `+ ${ip.hfa} pts de ventaja de local repartidos entre ambos marcadores.` : 'Sede neutral: sin ventaja de local.'}
+        ${g.venue ? `<br>Estadio: ${esc(g.venue)}` : ''}
+      </div>
+    </details>
+  </article>`;
+}
+
+function renderWeek(){
+  renderWeeks();
+  const w = D.weeks.find(x => x.key === curKey);
+  $('#wtitle').textContent = w.label;
+  $('#wmeta').textContent = (w.stats_through
+    ? `Predicción basada en estadísticas hasta ${w.stats_through}`
+    : `Inicio de temporada: predicción basada en Elo de temporadas anteriores`) + ` · ${w.games.length} partidos · Modelo: ${$('#model').selectedOptions[0].text}`;
+  let vs = weekViews(w);
+  const s = weekSummary(vs);
+  const b = $('#wbanner');
+  if (s) {
+    b.hidden = false;
+    b.innerHTML = `<div><b>${s.correct}/${s.n}</b>Ganadores acertados (${pct(s.correct,s.n)})</div>
+      <div><b>${s.pts}/${s.ptsMax}</b>Puntos de confianza obtenidos</div>
+      <div><b>${fx(s.mae)}</b>Error prom. en margen (pts)</div>`;
+  } else b.hidden = true;
+  $('#bye').textContent = w.bye.length ? 'Descansan: ' + w.bye.map(t => D.teams[t]?.short || t).join(', ') : '';
+  if (onlyHigh) vs = vs.filter(x => x.v.level === 'Alta');
+  const sort = $('#sort').value;
+  if (sort === 'pts') vs.sort((a,b) => b.v.pts - a.v.pts);
+  if (sort === 'cert') vs.sort((a,b) => b.v.cert - a.v.cert);
+  $('#games').innerHTML = vs.length ? vs.map(gameCard).join('') : '<div class="empty">No hay partidos con certidumbre alta esta jornada.</div>';
+  document.querySelectorAll('.manual').forEach(box => {
+    const id = box.dataset.id;
+    box.querySelectorAll('input').forEach(inp => inp.onchange = () => {
+      const m = getMan(id); m[inp.dataset.s] = parseFloat(inp.value) || 0; setMan(id, m); rerender(id); });
+    box.querySelector('[data-reset]').onclick = () => { setMan(id, {h:0, a:0}); rerender(id); };
+  });
+  if (typeof renderAcc === 'function' && accReady) { renderAcc(); renderPicks(); }
+}
+function rerender(openId){ renderWeek(); const el = document.querySelector(`.manual[data-id="${openId}"]`); if (el) el.closest('details').open = true; }
+$('#sort').onchange = () => { store.set('sort', $('#sort').value); renderWeek(); };
+$('#model').onchange = () => { model = $('#model').value; store.set('model', model); renderWeek(); };
+const autoBtn = $('#autoAdj');
+const paintAuto = () => { autoBtn.classList.toggle('on', useAuto); autoBtn.textContent = 'Ajustes lesiones/clima: ' + (useAuto ? 'Sí' : 'No'); };
+paintAuto();
+autoBtn.onclick = () => { useAuto = !useAuto; store.set('autoAdj', useAuto ? '1' : '0'); paintAuto(); renderWeek(); };
+$('#onlyHigh').onclick = e => {onlyHigh = !onlyHigh; e.target.classList.toggle('on', onlyHigh); renderWeek();};
+let accReady = false;
+renderWeek();
+
+// ---------- pick'em (estilo CBS) ----------
+let pkKey = curKey;
+const pkSel = $('#pkWeek');
+pkSel.innerHTML = D.weeks.map(w => `<option value="${w.key}">${esc(w.label)}</option>`).join('');
+pkSel.onchange = () => { pkKey = +pkSel.value; renderPicks(); };
+const getOvr = id => store.get('pick_' + id);
+const setOvr = (id, v) => { try { v ? localStorage.setItem('pick_' + id, v) : localStorage.removeItem('pick_' + id); } catch {} };
+
+function picksData(){
+  const w = D.weeks.find(x => x.key === pkKey);
+  const vs = weekViews(w).sort((a, b) => new Date(a.g.date) - new Date(b.g.date));
+  const rows = vs.map(({g, v}) => {
+    const o = getOvr(g.id), valid = o === g.home.abbr || o === g.away.abbr;
+    const pick = valid ? o : v.pick;
+    let res = null;
+    if (g.final && g.hs !== g.as) res = (g.hs > g.as ? g.home.abbr : g.away.abbr) === pick;
+    return {g, v, pick, ovr: valid && o !== v.pick, res};
+  });
+  const last = rows[rows.length - 1];
+  const done = rows.filter(r => r.res !== null);
+  return {w, rows, tb: last ? {g: last.g, total: Math.round(last.v.total)} : null,
+    score: done.length ? {pts: done.filter(r => r.res).reduce((s, r) => s + r.v.pts, 0),
+      max: done.reduce((s, r) => s + r.v.pts, 0), ok: done.filter(r => r.res).length, n: done.length} : null};
+}
+
+function renderPicks(){
+  pkSel.value = pkKey;
+  $('#pkModel').textContent = 'Modelo: ' + $('#model').selectedOptions[0].text + (useAuto ? '' : ' (sin ajustes lesiones/clima)');
+  const {w, rows, tb, score} = picksData();
+  let html = `<div class="pk-head"><div><small>NFL ${D.season} · Pick'em con confianza</small><h3>MIS PICKS · ${esc(w.label).toUpperCase()}</h3></div>
+    <div class="sc">${score ? `${score.pts} / ${score.max} pts<br><small>${score.ok} de ${score.n} acertados</small>` : `<small>${rows.length} partidos</small>`}</div></div>`;
+  [...rows].sort((a, b) => b.v.pts - a.v.pts).forEach(({g, v, pick, ovr, res}) => {
+    const d = fmtDate(new Date(g.date), {weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit'});
+    html += `<div class="pk-day">${esc(d)}${g.tv ? ' · ' + esc(g.tv) : ''}</div>`;
+    const btn = side => {
+      const t = g[side], sel = pick === t.abbr;
+      const cls = ['pk-team', sel ? 'sel' : '', sel && res === true ? 'ok' : '', sel && res === false ? 'no' : '', sel && ovr ? 'ovr' : ''].join(' ');
+      const sc = g.final ? (side === 'home' ? g.hs : g.as) : Math.round(side === 'home' ? v.hs : v.as);
+      return `<button class="${cls}" data-id="${g.id}" data-t="${t.abbr}" ${g.final ? 'disabled' : ''}>
+        <img src="${esc(t.logo)}" alt="" crossorigin="anonymous"><span>${esc(t.short || t.name)}</span><em>${sc}${g.final ? '' : ' pron.'}</em></button>`;
+    };
+    const ph = Math.round(v.prob_home * 100), pa = 100 - ph, [hc, ac] = barColors(g);
+    html += `<div class="pk-row">${btn('away')}<div class="pk-at">@</div>${btn('home')}<div class="pk-pts ${res === false ? 'lost' : ''}">${v.pts}</div>
+      <div class="pk-prob">
+        <span class="${pa > ph ? 'fav' : ''}">${pa}%</span>
+        <div class="pk-bar"><i style="width:${pa}%;background:${ac}"></i><i style="width:${ph}%;background:${hc}"></i><b style="left:50%"></b></div>
+        <span class="${ph > pa ? 'fav' : ''}">${ph}%</span>
+      </div></div>`;
+  });
+  if (tb) html += `<div class="pk-tb"><span>Desempate · puntos totales ${esc(tb.g.away.abbr)} @ ${esc(tb.g.home.abbr)}</span><b>${tb.g.final ? `${tb.total} <small style="font-size:13px">(real ${tb.g.hs + tb.g.as})</small>` : tb.total}</b></div>`;
+  $('#pkSheet').innerHTML = html;
+  document.querySelectorAll('.pk-team:not([disabled])').forEach(b => b.onclick = () => {
+    const g = D.weeks.find(x => x.key === pkKey).games.find(x => x.id === b.dataset.id);
+    setOvr(g.id, b.dataset.t === view(g).pick ? null : b.dataset.t);
+    renderPicks();
+  });
+}
+
+function picksText(){
+  const {w, rows, tb, score} = picksData();
+  const L = [`🏈 *MIS PICKS NFL ${D.season} · ${w.label}*`, `_Modelo: ${$('#model').selectedOptions[0].text}_`, '━━━━━━━━━━━━━━'];
+  [...rows].sort((a, b) => b.v.pts - a.v.pts).forEach(({g, v, pick, res}) => {
+    const opp = pick === g.home.abbr ? g.away : g.home, me = D.teams[pick];
+    const mark = res === true ? ' ✅' : res === false ? ' ❌' : '';
+    L.push(`*${v.pts}* · ${me?.short || pick} ${pick === g.home.abbr ? 'vs' : '@'} ${opp.abbr}${mark}`);
+  });
+  L.push('━━━━━━━━━━━━━━');
+  if (tb) L.push(`🔢 Desempate (${tb.g.away.abbr} @ ${tb.g.home.abbr}): ${tb.total} pts totales`);
+  if (score) L.push(`🏆 ${score.pts}/${score.max} pts · ${score.ok} de ${score.n} acertados`);
+  return L.join('\n');
+}
+
+$('#pkWa').onclick = () => window.open('https://wa.me/?text=' + encodeURIComponent(picksText()), '_blank');
+$('#pkCopy').onclick = async () => {
+  const b = $('#pkCopy');
+  try { await navigator.clipboard.writeText(picksText()); b.textContent = '¡Copiado!'; }
+  catch { prompt('Copia tus picks:', picksText()); }
+  setTimeout(() => b.textContent = 'Copiar texto', 1800);
+};
+function loadH2C(){
+  return window.html2canvas ? Promise.resolve() : new Promise((ok, bad) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    s.onload = ok; s.onerror = bad; document.head.appendChild(s);
+  });
+}
+$('#pkImg').onclick = async () => {
+  const b = $('#pkImg'); b.textContent = 'Generando...';
+  try {
+    await loadH2C();
+    const canvas = await html2canvas($('#pkSheet'), {scale: 2, useCORS: true, backgroundColor: '#ffffff'});
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    const name = `picks-${D.weeks.find(x => x.key === pkKey).label.replace(/\s+/g, '-').toLowerCase()}.png`;
+    const file = new File([blob], name, {type: 'image/png'});
+    if (navigator.canShare && navigator.canShare({files: [file]})) {
+      await navigator.share({files: [file], title: 'Mis picks NFL', text: picksText()});
+    } else {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    }
+  } catch (e) { alert('No se pudo generar la imagen (¿sin internet?). Usa "Enviar por WhatsApp" o "Copiar texto".'); }
+  b.textContent = 'Descargar imagen';
+};
+renderPicks();
+
+// ---------- teams table ----------
+const COLS = [
+  ['name','Equipo',null],['record','Récord',null],
+  ['off_ppp_raw','PPP Of.',3,1],['def_ppp_raw','PPP Def.',3,-1],
+  ['plays_pg_raw','Jugadas/PJ',1,0],['opp_plays_pg_raw','Jug. rival/PJ',1,0],
+  ['ppg','Pts/PJ',1,1],['papg','Pts perm./PJ',1,-1],
+  ['ypp_off','Yds/jugada Of.',2,1],['ypp_def','Yds/jugada Def.',2,-1],
+  ['to_margin','Dif. balones',0,1],['srs','SRS',1,1],['elo','Elo',0,1],['pyth','Pitag. %',0,1],
+];
+let tSort = ['elo', -1];
+function renderTeams(){
+  const rows = Object.entries(D.teams).map(([k, t]) => ({k, ...t, pyth: t.pyth*100}));
+  const [c, dir] = tSort;
+  rows.sort((a,b) => {const x=a[c], y=b[c]; if (typeof x === 'string') return dir*x.localeCompare(y); return dir*((x??-1e9)-(y??-1e9));});
+  const ranks = {};
+  COLS.forEach(([key,,,good]) => { if (!good) return;
+    const sorted = rows.filter(r => r[key]!=null).map(r => r[key]).sort((a,b) => good*(b-a));
+    ranks[key] = {top: sorted[4], bot: sorted[sorted.length-5]}; });
+  const cls = (key, v, good) => { if (!good || v==null || !ranks[key]) return '';
+    const r = ranks[key]; return good*(v - r.top) >= 0 ? 'hi' : good*(v - r.bot) <= 0 ? 'lo' : ''; };
+  $('#tteams').innerHTML = '<tr>' + COLS.map(([k,l]) => `<th data-k="${k}" class="${k===c?'sorted':''}">${l}${k===c?(dir>0?' ▲':' ▼'):''}</th>`).join('') + '</tr>' +
+    rows.map(r => '<tr>' + COLS.map(([k,,d,good]) => k==='name'
+      ? `<td class="tm"><img src="${esc(r.logo)}" alt="" loading="lazy">${esc(r.name)}</td>`
+      : `<td class="${cls(k, r[k], good)}">${d==null ? esc(r[k]) : (k==='to_margin' && r[k]>0 ? '+' : '') + fx(r[k], d)}</td>`).join('') + '</tr>').join('');
+  document.querySelectorAll('#tteams th').forEach(th => th.onclick = () => {
+    const k = th.dataset.k; tSort = [k, tSort[0]===k ? -tSort[1] : (typeof rows[0][k]==='string' ? 1 : -1)]; renderTeams(); });
+}
+renderTeams();
+
+// ---------- accuracy ----------
+// Grafica de lineas en SVG (sin librerias)
+function lineChart(labels, series, {min = 0, max = 100, refs = [], suffix = '%'} = {}){
+  const W = 760, Hh = 270, L = 44, R = 92, T = 16, B = 34, iw = W - L - R, ih = Hh - T - B;
+  const x = i => L + (labels.length === 1 ? iw / 2 : i * iw / (labels.length - 1));
+  const y = v => T + ih - (v - min) / (max - min) * ih;
+  let s = `<svg viewBox="0 0 ${W} ${Hh}" style="width:100%;height:auto;display:block" role="img">`;
+  for (let v = min; v <= max; v += 25) s += `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#e6eaf1"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="#5b6678">${v}${suffix}</text>`;
+  refs.forEach(r => s += `<line x1="${L}" x2="${W-R}" y1="${y(r.v)}" y2="${y(r.v)}" stroke="${r.c}" stroke-dasharray="5 4" stroke-width="1.5"/><text x="${W-R+6}" y="${y(r.v)+4}" text-anchor="start" font-size="10.5" fill="${r.c}" font-weight="600">${r.t}</text>`);
+  labels.forEach((l, i) => s += `<text x="${x(i)}" y="${Hh-12}" text-anchor="middle" font-size="11.5" fill="#5b6678">${esc(l)}</text>`);
+  series.forEach(se => {
+    const pts = se.data.map((v, i) => v == null ? null : [x(i), y(v), v, i]).filter(Boolean);
+    s += `<polyline fill="none" stroke="${se.color}" stroke-width="${se.w || 2}" stroke-linejoin="round" stroke-linecap="round" ${se.dash ? `stroke-dasharray="${se.dash}"` : ''} points="${pts.map(p => p[0] + ',' + p[1]).join(' ')}"/>`;
+    pts.forEach(p => s += `<circle cx="${p[0]}" cy="${p[1]}" r="${se.w > 2 ? 5 : 3.5}" fill="${se.color}" stroke="#fff" stroke-width="1.5"><title>${esc(se.name)} · ${esc(labels[p[3]])}: ${Math.round(p[2])}${suffix}</title></circle>`);
+    if (se.label && pts.length) { const p = pts[pts.length - 1]; s += `<text x="${p[0] - 8}" y="${p[1] - 10}" text-anchor="end" font-size="12" font-weight="700" fill="${se.color}">${Math.round(p[2])}${suffix}</text>`; }
+  });
+  return s + '</svg>';
+}
+const MODEL_COLORS = {cons: '#D50A0A', ppp: '#013369', srs: '#11845b', elo: '#d98c00', pyth: '#7a4fb5'};
+const legend = items => `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;margin:4px 0 8px">${items.map(([n, c, w]) => `<span style="display:inline-flex;align-items:center;gap:6px"><i style="display:inline-block;width:18px;height:${w > 2 ? 4 : 3}px;border-radius:2px;background:${c}"></i>${esc(n)}</span>`).join('')}</div>`;
+
+function accCharts(wk){
+  if (!wk.length) return '';
+  const labels = wk.map(w => w.label.replace('Semana ', 'S'));
+  const weekly = [{name: 'Consenso', color: MODEL_COLORS.cons, w: 3.5, label: true, data: wk.map(w => 100 * w.summary.correct / w.summary.n)}]
+    .concat(Object.keys(MODEL_NAMES).map(k => ({name: MODEL_NAMES[k], color: MODEL_COLORS[k], w: 2, data: wk.map(w => 100 * w.summary.models[k] / w.summary.n)})));
+  // acumulado de la temporada
+  const cum = (getC) => { let c = 0, n = 0; return wk.map(w => { c += getC(w); n += w.summary.n; return 100 * c / n; }); };
+  const cumul = [{name: 'Consenso', color: MODEL_COLORS.cons, w: 3.5, label: true, data: cum(w => w.summary.correct)}]
+    .concat(Object.keys(MODEL_NAMES).map(k => ({name: MODEL_NAMES[k], color: MODEL_COLORS[k], w: 2, data: cum(w => w.summary.models[k])})));
+  const leg = legend([['Consenso', MODEL_COLORS.cons, 4], ...Object.keys(MODEL_NAMES).map(k => [MODEL_NAMES[k], MODEL_COLORS[k], 2])]);
+  const refs = [{v: 50, t: 'Volado 50%', c: '#9aa3b2'}, {v: 65, t: 'Experto ~65%', c: '#11845b'}];
+  return `<div class="card"><h3>Aciertos por jornada</h3>${leg}${lineChart(labels, weekly, {refs})}
+      <p class="hint">Porcentaje de ganadores acertados cada semana. Pasa el mouse sobre los puntos para ver el valor.</p></div>
+    <div class="card"><h3>Acumulado de la temporada</h3>${leg}${lineChart(labels, cumul, {min: 25, max: 100, refs})}
+      <p class="hint">Cómo va el porcentaje total de la temporada después de cada jornada. Entre más jornadas, más estable se vuelve.</p></div>`;
+}
+
+function renderAcc(){
+  const s = D.season_summary;
+  if (!s) { $('#tab-acc').innerHTML = '<div class="empty">Aún no hay partidos terminados para medir la precisión.</div>'; return; }
+  const models = Object.entries(s.models).sort((a,b) => b[1]-a[1]);
+  const best = models[0][1];
+  const lv = D.by_level;
+  const wk = D.weeks.filter(w => w.summary);
+  const cp = {};
+  wk.forEach(w => cp[w.key] = weekSummary(weekViews(w)));
+  const cpT = Object.values(cp).filter(Boolean).reduce((a, x) => ({pts: a.pts + x.pts, max: a.max + x.ptsMax, c: a.c + x.correct, n: a.n + x.n}), {pts:0, max:0, c:0, n:0});
+  $('#tab-acc').innerHTML = `
+    <div class="tiles">
+      <div class="tile r"><div class="v">${pct(s.correct, s.n)}</div><div class="l">Ganadores acertados en la temporada (${s.correct} de ${s.n})</div></div>
+      <div class="tile"><div class="v">${fx(s.mae)}</div><div class="l">Error promedio del margen (puntos)</div></div>
+      <div class="tile"><div class="v">${fx(s.mae_total)}</div><div class="l">Error promedio del total de puntos</div></div>
+      ${s.vegas_n ? `<div class="tile"><div class="v">${pct(s.vegas_correct, s.vegas_n)}</div><div class="l">Favorito de Las Vegas (${s.vegas_n} partidos con línea)</div></div>` : ''}
+    </div>
+    ${accCharts(wk)}
+    <div class="card"><h3>Puntos de confianza (16 → 1)</h3>
+      <p style="margin:0 0 10px">Con el modelo <b>${esc($('#model').selectedOptions[0].text)}</b>${useAuto ? '' : ' sin ajustes de lesiones/clima'}, en total ganaste <b>${cpT.pts}</b> de <b>${cpT.max}</b> puntos posibles (${pct(cpT.pts, cpT.max)}), con ${cpT.c} de ${cpT.n} ganadores acertados.</p>
+      ${wk.map(w => cp[w.key] ? `<div class="hbar"><span>${esc(w.label)} · ${cp[w.key].correct}/${cp[w.key].n}</span><div class="track"><i style="width:${100*cp[w.key].pts/cp[w.key].ptsMax}%"></i></div><b>${cp[w.key].pts}/${cp[w.key].ptsMax}</b></div>` : '').join('')}
+      <p class="hint">Cambia el modelo en la pestaña Predicciones para comparar cuál te habría dado más puntos.</p>
+    </div>
+    <div class="card"><h3>¿La certidumbre sirve?</h3>
+      ${['Alta','Media','Baja'].map(l => lv[l] ? `<div class="hbar"><span><span class="badge ${l}">${l}</span> &nbsp;${lv[l].n} partidos</span>
+        <div class="track"><i style="width:${100*lv[l].correct/lv[l].n}%"></i></div><b>${pct(lv[l].correct, lv[l].n)}</b></div>` : '').join('')}
+      <p class="hint">Si el sistema funciona, los pronósticos de certidumbre alta deben acertar más que los de baja.</p>
+    </div>
+    <div class="card"><h3>Precisión por modelo</h3>
+      <div class="hbar best"><span><b>Consenso (predicción final)</b></span><div class="track"><i style="width:${100*s.correct/s.n}%"></i></div><b>${pct(s.correct, s.n)}</b></div>
+      ${models.map(([k,v]) => `<div class="hbar"><span>${MODEL_NAMES[k]}</span><div class="track"><i style="width:${100*v/s.n}%"></i></div><b>${pct(v, s.n)}</b></div>`).join('')}
+    </div>
+    <div class="card"><h3>Jornada por jornada</h3><div class="tscroll"><table class="st">
+      <tr><th>Jornada</th><th>Aciertos</th><th>%</th>${Object.keys(MODEL_NAMES).map(k=>`<th>${MODEL_NAMES[k].split(' (')[0]}</th>`).join('')}<th>Error margen</th></tr>
+      ${wk.map(w => `<tr><td>${esc(w.label)}</td><td>${w.summary.correct}/${w.summary.n}</td><td>${pct(w.summary.correct,w.summary.n)}</td>
+        ${Object.keys(MODEL_NAMES).map(k=>`<td>${w.summary.models[k]}/${w.summary.n}</td>`).join('')}<td>${fx(w.summary.mae)}</td></tr>`).join('')}
+    </table></div>
+    <p class="hint">Referencia: los mejores modelos públicos aciertan alrededor de 63–68% de los ganadores en una temporada completa.</p></div>`;
+}
+renderAcc(); accReady = true;
+
+// ---------- how-to example ----------
+(function(){
+  const w = D.weeks.find(x => x.key === D.current_key); const g = w?.games[0]; if (!g) return;
+  const ip = g.pred.inputs, H = g.home.abbr, A = g.away.abbr;
+  $('#howExample').innerHTML = `<b>Ejemplo con ${esc(g.away.name)} @ ${esc(g.home.name)}:</b><br>
+   ${H}: (${fx(ip.home.off_ppp,3)} × ${fx(ip.home.plays_pg)} + ${fx(ip.away.def_ppp,3)} × ${fx(ip.away.opp_plays_pg)}) / 2 = <b>${fx((ip.h_off+ip.a_def)/2)} pts</b><br>
+   ${A}: (${fx(ip.away.off_ppp,3)} × ${fx(ip.away.plays_pg)} + ${fx(ip.home.def_ppp,3)} × ${fx(ip.home.opp_plays_pg)}) / 2 = <b>${fx((ip.a_off+ip.h_def)/2)} pts</b>`;
+})();
+</script>
+</body>
+</html>
