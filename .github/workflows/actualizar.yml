@@ -2,7 +2,7 @@ name: Actualizar NFL Predictor
 
 on:
   schedule:
-    - cron: "0 1,9,17 * * *"   # cada 8 horas: 3:00, 11:00 y 19:00 hora centro de Mexico
+    - cron: "0 0,6,12,18 * * *"   # cada 6 horas: 0:00, 6:00, 12:00 y 18:00 hora centro de Mexico
   workflow_dispatch:       # boton "Run workflow" para actualizar a mano
   push:                    # al subir cambios de codigo, regenerar (y cifrar) los datos
     branches: [main]

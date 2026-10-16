@@ -568,7 +568,7 @@ def summarize(results):
     return s
 
 
-SCHEDULE_HOURS = [3, 11, 19]   # cada 8 horas (hora centro de Mexico)
+SCHEDULE_HOURS = [0, 6, 12, 18]   # cada 6 horas (hora centro de Mexico)
 
 
 def next_run(now):
