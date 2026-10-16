@@ -6,6 +6,9 @@ on:
     - cron: "0 20 * * 4"   # jueves 2:00 p.m. (lesiones y clima)
     - cron: "0 15 * * 0"   # domingo 9:00 a.m. (lesiones y clima)
   workflow_dispatch:       # boton "Run workflow" para actualizar a mano
+  push:                    # al subir cambios de codigo, regenerar (y cifrar) los datos
+    branches: [main]
+    paths-ignore: ["data/**"]
 
 permissions:
   contents: write
