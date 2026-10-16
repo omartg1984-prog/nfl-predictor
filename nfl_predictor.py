@@ -265,9 +265,54 @@ def fetch_extras(season, games):
 QB_PENALTY = {"Out": 5.0, "Doubtful": 3.5, "Questionable": 1.0}
 
 
-def auto_adjust(g, ex):
-    """Ajuste automatico en puntos para cada equipo por QB titular lesionado y clima."""
+BYE_POINTS = 1.0     # equipo que viene de semana de descanso (rival no)
+REST_POINTS = 0.5    # ventaja por 3+ dias mas de descanso que el rival (ej. jugo el jueves anterior)
+
+
+def parse_date(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def rest_days(games):
+    """Dias de descanso de cada equipo antes de cada partido: {(id, abbr): dias o None}."""
+    by_team = defaultdict(list)
+    for g in games:
+        for side in ("home", "away"):
+            by_team[g[side]["abbr"]].append(g)
+    out = {}
+    for t, lst in by_team.items():
+        lst.sort(key=lambda g: g["date"])
+        prev = None
+        for g in lst:
+            # fecha en hora del este de EUA (UTC-5): el Sunday Night en UTC ya es lunes
+            et = lambda x: (parse_date(x["date"]) - timedelta(hours=5)).date()
+            out[(g["id"], t)] = (et(g) - et(prev)).days if prev else None
+            prev = g
+    return out
+
+
+def rest_adjust(g, rest, adj):
+    """Bye (13+ dias de descanso) = +1 pt; si nadie viene de bye, 3+ dias mas de descanso = +0.5 pt."""
+    h, a = g["home"]["abbr"], g["away"]["abbr"]
+    dh, da = rest.get((g["id"], h)), rest.get((g["id"], a))
+    if dh is None or da is None:
+        return
+    bh, ba = dh >= 13, da >= 13
+    if bh != ba:
+        side, t = ("home", h) if bh else ("away", a)
+        adj[side] += BYE_POINTS
+        adj["notes"].append(f"⏸ {t} viene de semana de descanso (bye): +{BYE_POINTS:g} pt")
+    elif not bh and abs(dh - da) >= 3:
+        side, t, more, less = ("home", h, dh, da) if dh > da else ("away", a, da, dh)
+        adj[side] += REST_POINTS
+        adj["notes"].append(f"🛌 {t} con {more} dias de descanso vs {less} del rival: +{REST_POINTS:g} pt")
+
+
+def auto_adjust(g, ex, rest=None):
+    """Ajuste automatico en puntos para cada equipo: descanso/bye, QB titular lesionado y clima."""
     adj = {"home": 0.0, "away": 0.0, "notes": []}
+    if rest:
+        rest_adjust(g, rest, adj)
     if not ex:
         return adj
     for side in ("home", "away"):
@@ -278,26 +323,26 @@ def auto_adjust(g, ex):
                 pen = QB_PENALTY[p["status"]]
                 adj[side] -= pen
                 st = {"Out": "FUERA", "Doubtful": "dudoso", "Questionable": "en duda"}[p["status"]]
-                adj["notes"].append(f"QB titular {p['name']} ({abbr}) {st}: -{pen:g} pts a {abbr}")
+                adj["notes"].append(f"🚑 QB titular {p['name']} ({abbr}) {st}: -{pen:g} pts a {abbr}")
     w = ex.get("weather")
     if w and not g.get("indoor"):
         per = 0.0
         gust, precip, temp = w.get("gust") or 0, w.get("precip") or 0, w.get("temp")
         if gust >= 25:
             per += 2.0
-            adj["notes"].append(f"Viento muy fuerte ({round(gust * 1.609)} km/h): -4 al total")
+            adj["notes"].append(f"🌬️ Viento muy fuerte ({round(gust * 1.609)} km/h): -4 al total")
         elif gust >= 18:
             per += 1.0
-            adj["notes"].append(f"Viento fuerte ({round(gust * 1.609)} km/h): -2 al total")
+            adj["notes"].append(f"🌬️ Viento fuerte ({round(gust * 1.609)} km/h): -2 al total")
         if precip >= 70:
             per += 1.0
-            adj["notes"].append(f"Lluvia/nieve probable ({precip}%): -2 al total")
+            adj["notes"].append(f"🌧️ Lluvia/nieve probable ({precip}%): -2 al total")
         elif precip >= 40:
             per += 0.5
-            adj["notes"].append(f"Posible lluvia ({precip}%): -1 al total")
+            adj["notes"].append(f"🌧️ Posible lluvia ({precip}%): -1 al total")
         if temp is not None and temp <= 20:
             per += 0.75
-            adj["notes"].append(f"Frio extremo ({round((temp - 32) / 1.8)}°C): -1.5 al total")
+            adj["notes"].append(f"🥶 Frio extremo ({round((temp - 32) / 1.8)}°C): -1.5 al total")
         adj["home"] -= per
         adj["away"] -= per
     return adj
@@ -591,6 +636,7 @@ def main():
     pending = [k for k in keys if not all(g["final"] for g in by_key[k])]
     current = pending[0] if pending else keys[-1]
     extras = fetch_extras(season, by_key[current])
+    rest = rest_days(games)
 
     teams_meta = {}
     for g in games:
@@ -608,7 +654,7 @@ def main():
         wk_games, results = [], []
         for g in sorted(by_key[k], key=lambda g: g["date"]):
             ex = extras.get(g["id"])
-            p = predict(g, ts, league, O, D, elo, weeks_played, auto_adjust(g, ex))
+            p = predict(g, ts, league, O, D, elo, weeks_played, auto_adjust(g, ex, rest))
             r = grade(g, p)
             results.append(r)
             wk_games.append({**g, "pred": p, "result": r, "extra": ex})

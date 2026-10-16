@@ -89,7 +89,7 @@ summary{cursor:pointer;color:var(--navy);font-weight:600;font-size:13px}
 .ghead{align-items:center}
 .ghead .gl{display:flex;flex-direction:column;gap:2px}
 .info{margin:8px 14px 0;font-size:12.5px;color:var(--muted);line-height:1.55}
-.info .adj{color:var(--bad);font-weight:600}
+.info .adj{color:var(--ink);font-weight:600}
 .info .man{color:#6a1b9a;font-weight:600}
 .injl{font-size:12px;margin-top:6px;line-height:1.5}
 .injl b{color:var(--ink)}
@@ -292,11 +292,12 @@ Puntos esperados del equipo A = ( Ofensiva de A + Defensiva de B ) / 2</div>
       </ul>
     </div>
     <div class="card">
-      <h3>Lesiones, clima y cambios de QB</h3>
+      <h3>Lesiones, clima, descanso y cambios de QB</h3>
       <p><b>Automático (datos de ESPN, solo para la jornada en curso):</b></p>
       <ul>
         <li><b>QB titular</b> (el líder de yardas por pase del equipo) en el reporte de lesiones: <b>Fuera −5</b>, <b>Dudoso −3.5</b>, <b>En duda −1</b> puntos a su equipo. Cambiar de titular a suplente vale típicamente de 3 a 7 puntos.</li>
         <li><b>Clima</b> (solo estadios abiertos): ráfagas ≥ 29 km/h −2 al total y ≥ 40 km/h −4; lluvia o nieve probable −1 a −2; frío extremo (≤ −7 °C) −1.5. El clima afecta sobre todo el total de puntos, no tanto quién gana.</li>
+        <li><b>Descanso:</b> el equipo que viene de su <b>semana de descanso (bye)</b> recibe <b>+1</b> punto, salvo que el rival también venga de bye. Si ninguno viene de bye pero uno tuvo 3 o más días extra de descanso (por ejemplo, jugó el jueves anterior y tuvo 10 días contra 7), recibe <b>+0.5</b>. Hace 20 años el bye valía 2–3 puntos; hoy vale alrededor de 1. Se calcula con el calendario, así que aplica a todas las jornadas.</li>
         <li>Los jugadores en la lista de lesionados de largo plazo (IR) no se ajustan porque su ausencia ya se refleja en las estadísticas.</li>
       </ul>
       <p><b>Manual:</b> en cada partido abre "Ver modelos, lesiones y ajustes" y suma o resta puntos a cualquier equipo. Por ejemplo: QB suplente confirmado −5, receptor o pass rusher estrella fuera −1 a −2, varios titulares de la línea ofensiva fuera −1.5, viaje corto con descanso extra +1. Tus ajustes se guardan en este navegador y se aplican a todos los modelos.</p>

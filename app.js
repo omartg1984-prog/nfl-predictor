@@ -176,7 +176,7 @@ function gameCard({g, v}){
     </div>
     ${res}
     <div class="info">
-      ${notes.map(n => `<div class="adj">⚠ ${esc(n)}</div>`).join('')}
+      ${notes.map(n => `<div class="adj">${esc(n)}</div>`).join('')}
       ${v.manual ? `<div class="man">✎ Tu ajuste: ${A} ${v.man.a>0?'+':''}${v.man.a||0}, ${H} ${v.man.h>0?'+':''}${v.man.h||0}</div>` : ''}
       ${wx ? `<div>${wx}</div>` : ''}
       ${refs.length ? `<div>${refs.join(' · ')}</div>` : ''}
