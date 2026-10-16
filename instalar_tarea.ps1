@@ -5,15 +5,15 @@ $py = (Get-Command pythonw.exe -ErrorAction SilentlyContinue).Source
 if (-not $py) { $py = (Get-Command python.exe).Source }
 
 $action   = New-ScheduledTaskAction -Execute $py -Argument "`"$dir\nfl_predictor.py`"" -WorkingDirectory $dir
-# Martes 3 a.m.: estadisticas nuevas. Jueves 2 p.m. y domingo 9 a.m.: refresca lesiones y clima.
+# Cada 8 horas: 3:00 a.m. (ya termino el Monday Night), 11:00 a.m. y 7:00 p.m.
 $trigger  = @(
-  (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Tuesday  -At 3:00am),
-  (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Thursday -At 2:00pm),
-  (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday   -At 9:00am)
+  (New-ScheduledTaskTrigger -Daily -At 3:00am),
+  (New-ScheduledTaskTrigger -Daily -At 11:00am),
+  (New-ScheduledTaskTrigger -Daily -At 7:00pm)
 )
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
             -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 15)
 
 Register-ScheduledTask -TaskName "NFL Predictor - Actualizacion semanal" -Action $action -Trigger $trigger `
   -Settings $settings -Description "Descarga estadisticas NFL y recalcula predicciones (martes 3 a.m.)" -Force | Out-Null
-Write-Host "Tarea creada: martes 3:00 a.m. (estadisticas), jueves 2:00 p.m. y domingo 9:00 a.m. (lesiones/clima) usando $py"
+Write-Host "Tarea creada: cada 8 horas (3:00 a.m., 11:00 a.m. y 7:00 p.m.) usando $py"

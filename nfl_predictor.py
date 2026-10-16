@@ -568,15 +568,14 @@ def summarize(results):
     return s
 
 
-SCHEDULE = [(1, 3), (3, 14), (6, 9)]   # (dia: 0=lunes, hora): martes 3am, jueves 2pm, domingo 9am
+SCHEDULE_HOURS = [3, 11, 19]   # cada 8 horas (hora centro de Mexico)
 
 
 def next_run(now):
     cands = []
-    for wd, hr in SCHEDULE:
-        d = now + timedelta(days=(wd - now.weekday()) % 7)
-        t = d.replace(hour=hr, minute=0, second=0, microsecond=0)
-        cands.append(t if t > now else t + timedelta(days=7))
+    for hr in SCHEDULE_HOURS:
+        t = now.replace(hour=hr, minute=0, second=0, microsecond=0)
+        cands.append(t if t > now else t + timedelta(days=1))
     return min(cands)
 
 
