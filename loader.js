@@ -1,5 +1,12 @@
 // Carga la app. Si los datos vienen cifrados (window.NFL_ENC), pide la contraseña y los descifra en el navegador.
 (function () {
+  // los datos se piden con ?t= para no recibir una version vieja guardada en cache
+  const ds = document.createElement('script');
+  ds.src = 'data/nfl_data.js?t=' + Date.now();
+  ds.onload = ds.onerror = init;
+  document.body.appendChild(ds);
+
+  function init() {
   function startApp() {
     const s = document.createElement('script');
     s.src = 'app.js?v=' + encodeURIComponent((window.NFL_DATA && window.NFL_DATA.generated) || '');
@@ -63,4 +70,5 @@
       if (!ok) { try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch (e) {} showLock(); }
     });
   } else showLock();
+  }
 })();

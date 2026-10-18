@@ -39,6 +39,17 @@ ELO_K = 20
 ELO_HFA = 48            # ventaja de local en puntos Elo
 ELO_REVERT = 1 / 3      # regresion a la media entre temporadas
 ELO_PTS = 25            # 25 puntos Elo = 1 punto de margen
+FORM_DECAY = 1.0         # forma reciente (0.85 = cada jornada hacia atras pesa 15% menos). Desactivado: en la
+#                          prueba de semanas 2-6 bajo los aciertos; volver a probar a mitad de temporada
+DIV_POINTS = 1.0         # partido divisional: el favorito pierde hasta 1 pt de margen
+TRAVEL_POINTS = 1.0      # equipo del Pacifico jugando temprano (antes de 2 p.m. ET) en el Este
+DIVISIONS = {
+    "AFC Este": "BUF MIA NE NYJ", "AFC Norte": "BAL CIN CLE PIT", "AFC Sur": "HOU IND JAX TEN", "AFC Oeste": "DEN KC LV LAC",
+    "NFC Este": "DAL NYG PHI WSH", "NFC Norte": "CHI DET GB MIN", "NFC Sur": "ATL CAR NO TB", "NFC Oeste": "ARI LAR SF SEA",
+}
+TEAM_DIV = {t: d for d, ts in DIVISIONS.items() for t in ts.split()}
+EASTERN = set("BUF MIA NE NYJ BAL CIN CLE PIT IND JAX TB ATL CAR DET NYG PHI WSH".split())
+PACIFIC = set("SEA SF LAR LAC LV ARI".split())
 BASE_WEIGHTS = {"ppp": 0.25, "srs": 0.30, "elo": 0.30, "pyth": 0.15}
 POST_LABELS = {1: "Wild Card", 2: "Divisional", 3: "Final de Conferencia", 5: "Super Bowl"}
 PHI = NormalDist().cdf
@@ -409,10 +420,13 @@ def auto_adjust(g, ex, rest=None, gp=None):
 # ---------------------------------------------------------- estadisticas ---
 
 def team_stats(games, box):
-    raw = defaultdict(lambda: dict(g=0, w=0, l=0, t=0, pf=0, pa=0, po=0.0, pd=0.0, yo=0, yd=0, tog=0, tot=0))
+    raw = defaultdict(lambda: dict(g=0, w=0, l=0, t=0, pf=0, pa=0, po=0.0, pd=0.0, yo=0, yd=0, tog=0, tot=0,
+                                   wg=0.0, wpf=0.0, wpa=0.0, wpo=0.0, wpd=0.0))
+    last_key = max((g["key"] for g in games if g["final"]), default=0)
     for g in games:
         if not g["final"]:
             continue
+        wt = FORM_DECAY ** (last_key - g["key"])   # partidos recientes pesan mas
         h, a = g["home"]["abbr"], g["away"]["abbr"]
         bx = box.get(g["id"], {})
         for me, op, pf, pa in ((h, a, g["hs"], g["as"]), (a, h, g["as"], g["hs"])):
@@ -428,6 +442,11 @@ def team_stats(games, box):
             r["tog"] += mine.get("to") or 0
             r["tot"] += theirs.get("to") or 0
             r["w" if pf > pa else "l" if pf < pa else "t"] += 1
+            r["wg"] += wt
+            r["wpf"] += wt * pf
+            r["wpa"] += wt * pa
+            r["wpo"] += wt * (mine.get("plays") or DEFAULT_PLAYS)
+            r["wpd"] += wt * (theirs.get("plays") or DEFAULT_PLAYS)
 
     tg = sum(r["g"] for r in raw.values())
     lg_ppg = sum(r["pf"] for r in raw.values()) / tg if tg else DEFAULT_PPP * DEFAULT_PLAYS
@@ -437,9 +456,9 @@ def team_stats(games, box):
 
     out = {}
     for t, r in raw.items():
-        g = r["g"]
-        pf_pg = (r["pf"] + k * lg_ppg) / (g + k)
-        pa_pg = (r["pa"] + k * lg_ppg) / (g + k)
+        g, wg = r["g"], r["wg"]
+        pf_pg = (r["wpf"] + k * lg_ppg) / (wg + k)
+        pa_pg = (r["wpa"] + k * lg_ppg) / (wg + k)
         out[t] = {
             "g": g, "w": r["w"], "l": r["l"], "t": r["t"],
             "record": f"{r['w']}-{r['l']}" + (f"-{r['t']}" if r["t"] else ""),
@@ -451,10 +470,10 @@ def team_stats(games, box):
             "plays_pg_raw": r["po"] / g if g else None,
             "opp_plays_pg_raw": r["pd"] / g if g else None,
             # valores suavizados (para predecir)
-            "off_ppp": (r["pf"] + k * lg_plays * lg_ppp) / (r["po"] + k * lg_plays),
-            "def_ppp": (r["pa"] + k * lg_plays * lg_ppp) / (r["pd"] + k * lg_plays),
-            "plays_pg": (r["po"] + k * lg_plays) / (g + k),
-            "opp_plays_pg": (r["pd"] + k * lg_plays) / (g + k),
+            "off_ppp": (r["wpf"] + k * lg_plays * lg_ppp) / (r["wpo"] + k * lg_plays),
+            "def_ppp": (r["wpa"] + k * lg_plays * lg_ppp) / (r["wpd"] + k * lg_plays),
+            "plays_pg": (r["wpo"] + k * lg_plays) / (wg + k),
+            "opp_plays_pg": (r["wpd"] + k * lg_plays) / (wg + k),
             "ypp_off": r["yo"] / r["po"] if r["po"] else None,
             "ypp_def": r["yd"] / r["pd"] if r["pd"] else None,
             "to_margin": r["tot"] - r["tog"],
@@ -472,16 +491,20 @@ def neutral_team(league):
 def srs_ratings(games, lg_ppg):
     """Rating ofensivo/defensivo ajustado por la calidad de los rivales (Simple Rating System)."""
     played = defaultdict(list)
+    last_key = max((g["key"] for g in games if g["final"]), default=0)
     for g in games:
         if g["final"]:
             h, a = g["home"]["abbr"], g["away"]["abbr"]
-            played[h].append((a, g["hs"], g["as"]))
-            played[a].append((h, g["as"], g["hs"]))
+            wt = FORM_DECAY ** (last_key - g["key"])
+            played[h].append((a, g["hs"], g["as"], wt))
+            played[a].append((h, g["as"], g["hs"], wt))
     O = {t: 0.0 for t in played}
     D = {t: 0.0 for t in played}
     for _ in range(200):
-        nO = {t: sum(pf - lg_ppg - D[o] for o, pf, _ in L) / (len(L) + PRIOR_GAMES) for t, L in played.items()}
-        nD = {t: sum(pa - lg_ppg - O[o] for o, _, pa in L) / (len(L) + PRIOR_GAMES) for t, L in played.items()}
+        nO = {t: sum(w * (pf - lg_ppg - D[o]) for o, pf, _, w in L) / (sum(x[3] for x in L) + PRIOR_GAMES)
+              for t, L in played.items()}
+        nD = {t: sum(w * (pa - lg_ppg - O[o]) for o, _, pa, w in L) / (sum(x[3] for x in L) + PRIOR_GAMES)
+              for t, L in played.items()}
         if nO:
             mo, md = sum(nO.values()) / len(nO), sum(nD.values()) / len(nD)
             nO = {t: v - mo for t, v in nO.items()}
@@ -521,6 +544,23 @@ def run_elo(all_games, cur_season):
 
 # ------------------------------------------------------------- prediccion ---
 
+def situational(g, margin, adj):
+    """Partido divisional (mas cerrado) y equipo del Pacifico jugando temprano en el Este."""
+    h, a = g["home"]["abbr"], g["away"]["abbr"]
+    if DIV_POINTS and TEAM_DIV.get(h) and TEAM_DIV.get(h) == TEAM_DIV.get(a) and abs(margin) > 0.1:
+        dog_side, dog = ("away", a) if margin > 0 else ("home", h)
+        pts = round(min(DIV_POINTS, abs(margin) / 2), 1)
+        adj[dog_side] += pts
+        adj["notes"].append(f"🤝 Partido divisional ({TEAM_DIV[h]}): suelen ser cerrados, +{pts:g} pt a {dog}")
+    if TRAVEL_POINTS and not g["neutral"] and h in EASTERN and a in PACIFIC:
+        utc = parse_date(g["date"])   # horario de verano en EUA: ~2do dom. de marzo a 1er dom. de noviembre
+        dst = (3 < utc.month < 11) or (utc.month == 3 and utc.day >= 8) or (utc.month == 11 and utc.day < 7)
+        et_hour = (utc - timedelta(hours=4 if dst else 5)).hour
+        if et_hour < 14:
+            adj["away"] -= TRAVEL_POINTS
+            adj["notes"].append(f"✈️ {a} viaja de la costa del Pacifico y juega temprano ({et_hour}:00 ET): -{TRAVEL_POINTS:g} pt")
+
+
 def predict(g, ts, league, O, D, elo, weeks_played, adj=None):
     adj = adj or {"home": 0.0, "away": 0.0, "notes": []}
     h, a = g["home"]["abbr"], g["away"]["abbr"]
@@ -554,6 +594,8 @@ def predict(g, ts, league, O, D, elo, weeks_played, adj=None):
     tw = sum(w.values())
     w = {k: v / tw for k, v in w.items()}
 
+    adj = {"home": adj["home"], "away": adj["away"], "notes": list(adj["notes"])}
+    situational(g, sum(w[k] * m for k, _, m, _, _ in raw) + hfa + adj["home"] - adj["away"], adj)
     adj_m, adj_t = adj["home"] - adj["away"], adj["home"] + adj["away"]
     models = []
     for key, name, m, sh, sa in raw:

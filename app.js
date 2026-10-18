@@ -465,3 +465,106 @@ renderAcc(); accReady = true;
    ${H}: (${fx(ip.home.off_ppp,3)} × ${fx(ip.home.plays_pg)} + ${fx(ip.away.def_ppp,3)} × ${fx(ip.away.opp_plays_pg)}) / 2 = <b>${fx((ip.h_off+ip.a_def)/2)} pts</b><br>
    ${A}: (${fx(ip.away.off_ppp,3)} × ${fx(ip.away.plays_pg)} + ${fx(ip.home.def_ppp,3)} × ${fx(ip.home.opp_plays_pg)}) / 2 = <b>${fx((ip.a_off+ip.h_def)/2)} pts</b>`;
 })();
+
+// ---------- boton Actualizar ----------
+// Con llave de GitHub guardada (solo en tu dispositivo): pide a GitHub que corra la actualizacion.
+// Sin llave: solo recarga los datos mas recientes publicados.
+const GH = {owner: 'omartg1984-prog', repo: 'nfl-predictor', wf: 'actualizar.yml'};
+const TOKEN_KEY = 'gh_update_token';
+const getToken = () => store.get(TOKEN_KEY);
+const updBtn = $('#updBtn');
+updBtn.hidden = false;
+updBtn.onclick = () => getToken() ? runUpdate() : showUpdHelp();
+
+function modal(html){
+  document.getElementById('updModal')?.remove();
+  const m = document.createElement('div');
+  m.className = 'modal'; m.id = 'updModal';
+  m.innerHTML = `<div class="modal-card">${html}</div>`;
+  m.onclick = e => { if (e.target === m) m.remove(); };
+  document.body.appendChild(m);
+  return m;
+}
+
+function showUpdHelp(){
+  const m = modal(`<h3>Actualizar</h3>
+    <p><b>¿Solo quieres ver lo más reciente?</b> Recarga la página con los últimos datos publicados.</p>
+    <div class="modal-row" style="justify-content:flex-start;margin-top:4px"><button class="pri" data-reload>🔄 Recargar datos</button></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+    <p><b>¿Eres el administrador?</b> Para que este botón le pida a GitHub descargar estadísticas nuevas, guarda una llave de acceso <i>solo una vez en este dispositivo</i>:</p>
+    <ol>
+      <li>Abre <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">crear llave en GitHub</a>.</li>
+      <li>Nombre: <i>NFL Predictor</i>. Expiración: la que prefieras.</li>
+      <li><i>Repository access</i> → <b>Only select repositories</b> → <b>${GH.repo}</b>.</li>
+      <li><i>Permissions</i> → <b>Actions: Read and write</b>. Nada más.</li>
+      <li><b>Generate token</b>, cópiala y pégala aquí:</li>
+    </ol>
+    <input type="password" id="tokIn" placeholder="github_pat_..." autocomplete="off">
+    <div class="modal-row"><button data-close>Cancelar</button><button class="pri" data-save>Guardar y actualizar</button></div>
+    <p class="hint">La llave se guarda solo en este navegador; no se publica ni la ven tus amigos. Solo permite correr la actualización de este repositorio.</p>`);
+  m.querySelector('[data-reload]').onclick = () => location.reload();
+  m.querySelector('[data-close]').onclick = () => m.remove();
+  m.querySelector('[data-save]').onclick = () => {
+    const t = m.querySelector('#tokIn').value.trim();
+    if (!t) return;
+    store.set(TOKEN_KEY, t);
+    runUpdate();
+  };
+}
+
+async function runUpdate(){
+  const steps = ['Pedir la actualización a GitHub', 'Descargar estadísticas y recalcular (≈1 min)', 'Publicar la página (≈1 min)', 'Recargar'];
+  const m = modal(`<h3>Actualizando…</h3><ul class="steps">${steps.map(s => `<li>${s}</li>`).join('')}</ul>
+    <p class="hint" id="updMsg">Puedes cerrar esta ventana; la actualización sigue en GitHub.</p>
+    <div class="modal-row"><button data-forget style="margin-right:auto">Olvidar llave</button><button data-close>Cerrar</button></div>`);
+  m.querySelector('[data-close]').onclick = () => m.remove();
+  m.querySelector('[data-forget]').onclick = () => { try { localStorage.removeItem(TOKEN_KEY); } catch {} m.remove(); };
+  const li = [...m.querySelectorAll('.steps li')];
+  const set = (i, c) => { li[i].className = c; };
+  const msg = t => { const e = m.querySelector('#updMsg'); if (e) e.textContent = t; };
+  const api = (path, opt = {}) => fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}${path}`, {...opt,
+    headers: {'Accept': 'application/vnd.github+json', 'Authorization': 'Bearer ' + getToken(), 'X-GitHub-Api-Version': '2022-11-28'}});
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const t0 = Date.now() - 5000;
+  const dataNow = () => fetch('data/nfl_data.js?t=' + Date.now()).then(r => r.text()).catch(() => '');
+  const before = location.protocol === 'file:' ? '' : await dataNow();
+  try {
+    set(0, 'run');
+    const r = await api(`/actions/workflows/${GH.wf}/dispatches`, {method: 'POST', body: JSON.stringify({ref: 'main'})});
+    if (r.status === 401 || r.status === 403 || r.status === 404) {
+      set(0, 'bad');
+      msg('GitHub rechazó la llave (vencida o sin permiso "Actions: Read and write"). Toca "Olvidar llave" y vuelve a crearla.');
+      return;
+    }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    set(0, 'ok'); set(1, 'run');
+    let run = null;
+    for (let i = 0; i < 90; i++) {   // hasta ~6 min
+      await sleep(4000);
+      const j = await (await api(`/actions/workflows/${GH.wf}/runs?event=workflow_dispatch&per_page=1`)).json();
+      run = (j.workflow_runs || []).find(x => new Date(x.created_at).getTime() >= t0);
+      if (run && run.status === 'completed') break;
+    }
+    if (!run || run.conclusion !== 'success') {
+      set(1, 'bad');
+      msg('La actualización no terminó bien. Revisa la pestaña Actions en GitHub.');
+      return;
+    }
+    set(1, 'ok'); set(2, 'run');
+    if (location.protocol === 'file:') {
+      set(2, 'ok');
+      msg('La página web ya se actualizó. Esta copia está en tu computadora: para actualizarla usa "Actualizar ahora.bat".');
+      return;
+    }
+    for (let i = 0; i < 60; i++) {   // esperar a que GitHub Pages publique (hasta ~4 min)
+      if ((await dataNow()) !== before) break;
+      await sleep(4000);
+    }
+    set(2, 'ok'); set(3, 'run');
+    await sleep(800);
+    location.reload();
+  } catch (e) {
+    msg('No se pudo conectar con GitHub (' + e.message + '). Revisa tu internet e inténtalo de nuevo.');
+    li.forEach(x => { if (x.className === 'run') x.className = 'bad'; });
+  }
+}
