@@ -11,10 +11,10 @@ if (!D) {
 }
 
 const MODEL_NAMES = {ppp:'Puntos por jugada (tu fórmula)', srs:'SRS ajustado por rival', elo:'Elo', pyth:'Pitagórico'};
-const dt = new Date(D.generated), nx = new Date(D.next_update);
+const dt = new Date(D.generated);
 const fmtDate = (d, o) => d.toLocaleString('es-MX', o);
 $('#season').textContent = D.season;
-$('#upd').innerHTML = `Última actualización: <b>${fmtDate(dt,{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</b><br>Próxima: <b>${fmtDate(nx,{weekday:'long',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</b>`;
+$('#upd').innerHTML = `Última actualización: <b>${fmtDate(dt,{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</b><br>Se actualiza cuando tú lo pides`;
 document.querySelectorAll('.p-hfa').forEach(e => e.textContent = D.params.hfa);
 document.querySelectorAll('.p-sigma').forEach(e => e.textContent = D.params.sigma);
 document.querySelectorAll('.p-prior').forEach(e => e.textContent = D.params.prior_games);
@@ -116,9 +116,10 @@ function injuryHtml(g){
   const ex = g.extra; if (!ex || !ex.injuries) return '';
   return ['away','home'].map(s => {
     const ab = g[s].abbr, list = (ex.injuries[ab] || []);
-    const qb = ex.qb?.[ab];
-    if (!list.length) return `<div class="injl"><b>${ab}:</b> sin lesionados reportados</div>`;
-    return `<div class="injl"><b>${ab}</b>${qb ? ` (QB titular: ${esc(qb)})` : ''}: ` +
+    const qs = ex.qb_start?.[ab], ql = ex.qb?.[ab];
+    const qbTxt = qs ? ` (QB probable: ${esc(qs)}${ql && ql !== qs ? `, en lugar de ${esc(ql)}` : ''})` : '';
+    if (!list.length) return `<div class="injl"><b>${ab}</b>${qbTxt}: sin lesionados reportados</div>`;
+    return `<div class="injl"><b>${ab}</b>${qbTxt}: ` +
       list.map(p => `${esc(p.name)} <small>${esc(p.pos||'')}</small> <span class="st-${p.status}">${ST_ES[p.status]||p.status}</span>`).join(' · ') + '</div>';
   }).join('');
 }

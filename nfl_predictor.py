@@ -135,7 +135,7 @@ def parse_event(e, season, stype, week):
     def team(c):
         t = c["team"]
         rec = (c.get("records") or [{}])[0].get("summary")
-        return {"abbr": t["abbreviation"], "name": t.get("displayName"), "short": t.get("shortDisplayName"),
+        return {"abbr": t["abbreviation"], "id": t.get("id"), "name": t.get("displayName"), "short": t.get("shortDisplayName"),
                 "color": t.get("color"), "alt": t.get("alternateColor"), "logo": t.get("logo"), "record": rec}
 
     odds = (comp.get("odds") or [{}])[0]
@@ -223,11 +223,17 @@ def fetch_extras(season, games):
         except Exception as ex:
             log(f"  aviso: no se pudo leer info de {g['id']}: {ex}")
             return g["id"], None
-        qb = {}
+        qb, qb_att = {}, {}
         for t in d.get("leaders", []):
             for c in t.get("leaders", []):
                 if c.get("name") == "passingYards" and c.get("leaders"):
-                    qb[t["team"]["abbreviation"]] = c["leaders"][0]["athlete"].get("displayName")
+                    ab = t["team"]["abbreviation"]
+                    qb[ab] = c["leaders"][0]["athlete"].get("displayName")
+                    try:   # "97/162, 942 YDS..." -> 162 intentos
+                        qb_att[ab] = int(c["leaders"][0]["displayValue"].split(",")[0].split("/")[1])
+                    except (KeyError, IndexError, ValueError):
+                        pass
+        depth = {g[s]["abbr"]: fetch_depth_qbs(g[s].get("id")) for s in ("home", "away")}
         inj = {}
         for t in d.get("injuries", []):
             lst = []
@@ -247,7 +253,7 @@ def fetch_extras(season, games):
             except (KeyError, TypeError, ValueError):
                 return None
         return g["id"], {
-            "qb": qb, "injuries": inj,
+            "qb": qb, "qb_att": qb_att, "depth": depth, "injuries": inj,
             "weather": {"temp": w.get("temperature"), "gust": w.get("gust"), "precip": w.get("precipitation")} if w else None,
             "fpi_home": proj("homeTeam"), "fpi_away": proj("awayTeam"),
             "fetched": datetime.now().astimezone().isoformat(timespec="minutes"),
@@ -263,6 +269,66 @@ def fetch_extras(season, games):
 
 
 QB_PENALTY = {"Out": 5.0, "Doubtful": 3.5, "Questionable": 1.0}
+QB_CHANGE = 5.0          # puntos que vale cambiar del QB titular al suplente
+ATT_PER_GAME = 33.0      # pases intentados por partido de un QB titular
+
+
+def fetch_depth_qbs(team_id):
+    """QBs en orden del depth chart de ESPN, con su estatus de lesion: [{name, status}]."""
+    if not team_id:
+        return None
+    try:
+        d = get_json(f"{API}/teams/{team_id}/depthcharts")
+    except Exception:
+        return None
+    for dc in d.get("depthchart", []):
+        pos = dc.get("positions") or {}
+        qb = pos.get("qb") or pos.get("QB")
+        if qb:
+            out = []
+            for a in qb.get("athletes", []):
+                inj = a.get("injuries") or []
+                out.append({"name": a.get("displayName") or a.get("fullName"),
+                            "status": inj[0].get("status") if inj and isinstance(inj[0], dict) else None})
+            return out
+    return None
+
+
+def qb_adjust(g, ex, gp, adj):
+    """Detecta quien sera el QB titular (depth chart) y lo compara con el QB que genero las estadisticas."""
+    for side in ("home", "away"):
+        abbr = g[side]["abbr"]
+        leader = (ex.get("qb") or {}).get(abbr)          # lider de pases = QB de las estadisticas
+        if not leader:
+            continue
+        inj = {p["name"]: p["status"] for p in (ex.get("injuries") or {}).get(abbr, []) if p["pos"] == "QB"}
+        depth = (ex.get("depth") or {}).get(abbr)
+        if depth:
+            for p in depth:                              # el estatus mas reciente gana
+                if p.get("status"):
+                    inj[p["name"]] = p["status"]
+            healthy = [p["name"] for p in depth if inj.get(p["name"]) != "Out"]
+            starter = healthy[0] if healthy else None
+        else:
+            starter = leader if inj.get(leader) != "Out" else None
+        ex.setdefault("qb_start", {})[abbr] = starter
+        if starter and starter != leader:
+            # cuanto de las estadisticas del equipo se hizo con el QB que ya no juega
+            att = (ex.get("qb_att") or {}).get(abbr)
+            share = min(1.0, att / (ATT_PER_GAME * gp.get(abbr, 1))) if att else 1.0
+            pen = round(QB_CHANGE * share * 2) / 2
+            if pen:
+                adj[side] -= pen
+                why = {"Out": "fuera", "Doubtful": "dudoso"}.get(inj.get(leader), "no es el titular")
+                adj["notes"].append(f"🔄 {abbr}: {leader} {why}, titular probable {starter}: -{pen:g} pts")
+        elif inj.get(leader) in QB_PENALTY and inj.get(leader) != "Out":
+            pen = QB_PENALTY[inj[leader]]
+            adj[side] -= pen
+            st = {"Doubtful": "dudoso", "Questionable": "en duda"}[inj[leader]]
+            adj["notes"].append(f"🚑 QB titular {leader} ({abbr}) {st}: -{pen:g} pts a {abbr}")
+        elif not starter:
+            adj[side] -= QB_CHANGE
+            adj["notes"].append(f"🚑 QB titular {leader} ({abbr}) FUERA: -{QB_CHANGE:g} pts a {abbr}")
 
 
 BYE_POINTS = 1.0     # equipo que viene de semana de descanso (rival no)
@@ -308,22 +374,14 @@ def rest_adjust(g, rest, adj):
         adj["notes"].append(f"🛌 {t} con {more} dias de descanso vs {less} del rival: +{REST_POINTS:g} pt")
 
 
-def auto_adjust(g, ex, rest=None):
+def auto_adjust(g, ex, rest=None, gp=None):
     """Ajuste automatico en puntos para cada equipo: descanso/bye, QB titular lesionado y clima."""
     adj = {"home": 0.0, "away": 0.0, "notes": []}
     if rest:
         rest_adjust(g, rest, adj)
     if not ex:
         return adj
-    for side in ("home", "away"):
-        abbr = g[side]["abbr"]
-        starter = (ex.get("qb") or {}).get(abbr)
-        for p in (ex.get("injuries") or {}).get(abbr, []):
-            if p["pos"] == "QB" and p["name"] == starter and p["status"] in QB_PENALTY:
-                pen = QB_PENALTY[p["status"]]
-                adj[side] -= pen
-                st = {"Out": "FUERA", "Doubtful": "dudoso", "Questionable": "en duda"}[p["status"]]
-                adj["notes"].append(f"🚑 QB titular {p['name']} ({abbr}) {st}: -{pen:g} pts a {abbr}")
+    qb_adjust(g, ex, gp or {}, adj)
     w = ex.get("weather")
     if w and not g.get("indoor"):
         per = 0.0
@@ -568,17 +626,6 @@ def summarize(results):
     return s
 
 
-SCHEDULE_HOURS = [0, 6, 12, 18]   # cada 6 horas (hora centro de Mexico)
-
-
-def next_run(now):
-    cands = []
-    for hr in SCHEDULE_HOURS:
-        t = now.replace(hour=hr, minute=0, second=0, microsecond=0)
-        cands.append(t if t > now else t + timedelta(days=1))
-    return min(cands)
-
-
 # ------------------------------------------------------------ contrasena ---
 
 PASSWORD_FILE = os.path.join(BASE, "password.txt")
@@ -653,7 +700,7 @@ def main():
         wk_games, results = [], []
         for g in sorted(by_key[k], key=lambda g: g["date"]):
             ex = extras.get(g["id"])
-            p = predict(g, ts, league, O, D, elo, weeks_played, auto_adjust(g, ex, rest))
+            p = predict(g, ts, league, O, D, elo, weeks_played, auto_adjust(g, ex, rest, {t: v["g"] for t, v in ts.items()}))
             r = grade(g, p)
             results.append(r)
             wk_games.append({**g, "pred": p, "result": r, "extra": ex})
@@ -688,7 +735,6 @@ def main():
     now = datetime.now(TZ) if TZ else datetime.now().astimezone()
     out = {
         "generated": now.isoformat(timespec="seconds"),
-        "next_update": next_run(now).isoformat(timespec="minutes"),
         "season": season, "current_key": current, "teams": teams_out, "weeks": weeks_out,
         "league": league_now, "season_summary": summarize([r for r, _ in all_results]), "by_level": by_level,
         "params": {"hfa": HFA_POINTS, "sigma": SIGMA, "prior_games": PRIOR_GAMES, "weights": BASE_WEIGHTS,
