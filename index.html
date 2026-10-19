@@ -246,7 +246,7 @@ table.st td.tm img{width:26px;height:26px}
       <div class="tools">
         <label>Modelo:
           <select id="model">
-            <option value="cons">Consenso (los 4 combinados)</option>
+            <option value="cons">Consenso (5 modelos, incluye Vegas)</option>
             <option value="ppp">Puntos por jugada (tu fórmula)</option>
             <option value="srs">SRS ajustado por rival</option>
             <option value="elo">Elo</option>
@@ -336,12 +336,12 @@ Puntos esperados del equipo A = ( Ofensiva de A + Defensiva de B ) / 2</div>
     <div class="card">
       <h3>Consenso, local y certidumbre</h3>
       <ul>
-        <li><b>Consenso:</b> promedio ponderado de los 4 modelos (PPP 25%, SRS 30%, Elo 30%, Pitagórico 15%). Durante las primeras 4 semanas, cuando aún hay pocos datos, el Elo pesa más.</li>
+        <li><b>Consenso:</b> promedio ponderado de los 5 modelos: <b>Las Vegas 25%</b>, SRS 22.5%, Elo 22.5%, Puntos por jugada 18.75% y Pitagórico 11.25%. Si un partido todavía no tiene momio, se usan solo los otros 4 con sus pesos originales (PPP 25%, SRS 30%, Elo 30%, Pitagórico 15%). Durante las primeras 4 semanas, cuando aún hay pocos datos, el Elo pesa más.</li>
         <li><b>Ventaja de local:</b> +<span class="p-hfa"></span> puntos al local (0 en sede neutral, como los partidos internacionales).</li>
         <li><b>Probabilidad de ganar:</b> el margen esperado se convierte a probabilidad con una curva normal (desviación de <span class="p-sigma"></span> puntos, la variabilidad típica de un partido NFL). Ej.: favorito por 3 ≈ 59%, por 7 ≈ 70%, por 10 ≈ 77%.</li>
         <li><b>Suavizado:</b> se suman <span class="p-prior"></span> "partidos fantasma" con el promedio de la liga para que un equipo con 1 o 2 juegos atípicos no produzca predicciones exageradas.</li>
-        <li><b>Certidumbre (0–100):</b> combina 1) qué tan amplio es el margen esperado (45%), 2) cuántos de los 4 modelos coinciden en el ganador (35%) y 3) cuántas jornadas de datos hay (20%), con una penalización si los modelos difieren mucho entre sí. <b>Alta</b> ≥ 70, <b>Media</b> 50–69, <b>Baja</b> &lt; 50. En la pestaña Precisión puedes comprobar si los niveles altos de verdad aciertan más.</li>
-        <li><b>Puntos de confianza (16 → 1):</b> en modo Consenso, cada partido recibe un puntaje igual al <i>promedio de la probabilidad de que gane el favorito según los 4 modelos</i>. Si los 4 modelos lo ven claro, el puntaje es alto. Si el partido está parejo o los modelos no coinciden, es bajo. El más seguro recibe 16, el siguiente 15, y así hasta acabar los partidos. Si eliges un solo modelo, se ordena por la probabilidad de ese modelo.</li>
+        <li><b>Certidumbre (0–100):</b> combina 1) qué tan amplio es el margen esperado (45%), 2) cuántos de los modelos coinciden en el ganador (35%) y 3) cuántas jornadas de datos hay (20%), con una penalización si los modelos difieren mucho entre sí. <b>Alta</b> ≥ 70, <b>Media</b> 50–69, <b>Baja</b> &lt; 50. En la pestaña Precisión puedes comprobar si los niveles altos de verdad aciertan más.</li>
+        <li><b>Puntos de confianza (16 → 1):</b> en modo Consenso, cada partido recibe un puntaje igual al <i>promedio de la probabilidad de que gane el favorito según los 5 modelos</i>. Si todos lo ven claro, el puntaje es alto. Si el partido está parejo o los modelos no coinciden, es bajo. El más seguro recibe 16, el siguiente 15, y así hasta acabar los partidos. Si eliges un solo modelo, se ordena por la probabilidad de ese modelo.</li>
         <li><b>Sin ventaja de información:</b> cada jornada se predice usando solo partidos anteriores a ella, así las semanas pasadas muestran lo que el modelo habría dicho en su momento.</li>
       </ul>
     </div>
