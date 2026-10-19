@@ -129,6 +129,21 @@ summary{cursor:pointer;color:var(--navy);font-weight:600;font-size:13px}
 .lock-card button{width:100%;font-family:var(--head);font-size:18px;letter-spacing:1px;background:var(--navy);color:#fff;border:0;border-radius:10px;padding:11px;cursor:pointer}
 .lock-card button:hover{background:var(--red)}
 .lock-err{color:var(--bad);font-weight:600;font-size:13.5px;min-height:20px;margin-top:10px}
+/* las vegas */
+.vg-team{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;padding:8px 14px}
+.vg-team img{width:36px;height:36px}
+.vg-team .ml{font-family:var(--head);font-size:22px;color:var(--navy);text-align:right;line-height:1.1}
+.vg-team .ml small{display:block;font-family:var(--body);font-size:11px;color:var(--muted);font-weight:500}
+.vg-team.fav .ml{color:var(--red)}
+.vg-bars{padding:4px 14px 2px}
+.vg-bl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:7px}
+.vg-bl b{color:var(--ink)}
+.vg-bar{display:flex;height:9px;border-radius:999px;overflow:hidden;background:#e6eaf1;margin-top:2px}
+.vg-bar i{display:block;height:100%}
+.vg-ins{margin:8px 14px 0;font-size:12.5px;line-height:1.55}
+.vg-res{margin:10px 14px 14px;padding:8px 12px;border-radius:10px;font-size:13px;background:#f2f5fa}
+.sbadge{display:inline-block;font-weight:700;font-size:12px;border-radius:999px;padding:2px 10px;color:#fff;margin-right:6px}
+.s-boom{background:#b71c1c}.s-sur{background:#e65100}.s-mild{background:#d98c00}.s-exp{background:#11845b}.s-sure{background:#5b6678}
 /* pick'em */
 .pk-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;font-size:13.5px}
 .btn{font:inherit;font-weight:600;border:1px solid var(--navy);color:var(--navy);background:#fff;border-radius:8px;padding:8px 14px;cursor:pointer}
@@ -215,6 +230,7 @@ table.st td.tm img{width:26px;height:26px}
     <nav>
       <button data-tab="pred" class="on">Predicciones</button>
       <button data-tab="picks">Mis Picks</button>
+      <button data-tab="vegas">Las Vegas</button>
       <button data-tab="teams">Equipos</button>
       <button data-tab="acc">Precisión</button>
       <button data-tab="how">Cómo funciona</button>
@@ -235,6 +251,7 @@ table.st td.tm img{width:26px;height:26px}
             <option value="srs">SRS ajustado por rival</option>
             <option value="elo">Elo</option>
             <option value="pyth">Pitagórico</option>
+            <option value="vegas">Las Vegas (moneyline)</option>
           </select>
         </label>
         <label>Ordenar:
@@ -264,6 +281,24 @@ table.st td.tm img{width:26px;height:26px}
     </div>
     <div class="pk-sheet" id="pkSheet"></div>
     <p class="hint">Toca el otro equipo para cambiar el pick; tu cambio se guarda en este navegador. Los puntos de confianza vienen del modelo que elegiste en Predicciones. <b>Enviar por WhatsApp</b> abre WhatsApp con tus picks en texto. <b>Descargar imagen</b> guarda la hoja como foto para mandarla por WhatsApp; en el celular se abre directo el menú para compartir.</p>
+  </section>
+
+  <section class="tab" id="tab-vegas">
+    <div class="pk-tools"><label>Jornada: <select id="vgWeek"></select></label>
+      <span class="hint" style="margin:0">Solo moneyline (quién gana). Momios de consenso; % del público de Action Network.</span></div>
+    <div class="tiles" id="vgTiles"></div>
+    <div class="grid" id="vgGames"></div>
+    <div class="card" id="vgSeason" style="margin-top:18px"></div>
+    <div class="card how">
+      <h3>Cómo leer esta pestaña</h3>
+      <ul>
+        <li><b>Moneyline:</b> −150 significa que apuestas $150 para ganar $100 (favorito); +130 que apuestas $100 para ganar $130 (no favorito). Se convierte a probabilidad quitando la comisión de la casa.</li>
+        <li><b>% de apuestas</b> es cuánta gente (boletos) le va a cada equipo. <b>% del dinero</b> es cuánto dinero. Si un equipo tiene mucho más dinero que boletos, lo están apostando pocos apostadores grandes, que suelen ser profesionales.</li>
+        <li><b>Movimiento de línea:</b> compara el momio de apertura con el actual. Si la línea se mueve en contra del equipo que apoya el público, normalmente es dinero profesional.</li>
+        <li><b>Sorpresa:</b> 100 menos la probabilidad que Vegas le daba al ganador. Un no favorito de +300 que gana es una sorpresa de ~75.</li>
+        <li><b>En la predicción:</b> el moneyline entra como 5º modelo con 25% del peso del Consenso. También puedes elegir "Las Vegas" en el selector de modelo de Predicciones y Mis Picks.</li>
+      </ul>
+    </div>
   </section>
 
   <section class="tab" id="tab-teams">

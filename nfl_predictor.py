@@ -50,6 +50,9 @@ DIVISIONS = {
 TEAM_DIV = {t: d for d, ts in DIVISIONS.items() for t in ts.split()}
 EASTERN = set("BUF MIA NE NYJ BAL CIN CLE PIT IND JAX TB ATL CAR DET NYG PHI WSH".split())
 PACIFIC = set("SEA SF LAR LAC LV ARI".split())
+VEGAS_WEIGHT = 0.25      # peso del moneyline de Las Vegas dentro del consenso (si hay momio)
+AN_API = "https://api.actionnetwork.com/web/v2/scoreboard/nfl"   # momios y % de apuestas del publico
+AN_ABBR = {"JAC": "JAX", "LA": "LAR", "WAS": "WSH"}
 BASE_WEIGHTS = {"ppp": 0.25, "srs": 0.30, "elo": 0.30, "pyth": 0.15}
 POST_LABELS = {1: "Wild Card", 2: "Divisional", 3: "Final de Conferencia", 5: "Super Bowl"}
 PHI = NormalDist().cdf
@@ -277,6 +280,59 @@ def fetch_extras(season, games):
                 extras[gid] = out
     save_json(path, extras)
     return extras
+
+
+def american_prob(odds):
+    """Momio americano -> probabilidad implicita (con comision)."""
+    o = float(odds)
+    return 100 / (o + 100) if o > 0 else -o / (-o + 100)
+
+
+def fetch_market(season, games):
+    """Moneyline (consenso y apertura) y % de boletos / dinero del publico, de Action Network.
+    Se guarda por partido; despues de que empieza el partido ya no se toca (queda el momio de cierre)."""
+    path = os.path.join(CACHE_DIR, f"market_{season}.json")
+    market = load_json(path, {})
+    weeks = sorted({g["week"] for g in games if g["stype"] == 2 and (g["id"] not in market or g["state"] == "pre")})
+    if not weeks:
+        return market
+    by_pair = {(g["week"], g["home"]["abbr"], g["away"]["abbr"]): g for g in games if g["stype"] == 2}
+
+    def one(week):
+        try:
+            return week, get_json(f"{AN_API}?bookIds=15,30&periods=event&week={week}&season={season}")
+        except Exception as ex:
+            log(f"  aviso: no se pudieron leer momios de la semana {week}: {ex}")
+            return week, {}
+
+    log(f"  descargando momios de {len(weeks)} semana(s)...")
+    with ThreadPoolExecutor(6) as ex:
+        for week, d in ex.map(one, weeks):
+            for x in d.get("games", []):
+                T = {t["id"]: AN_ABBR.get(t["abbr"], t["abbr"]) for t in x.get("teams", [])}
+                g = by_pair.get((week, T.get(x.get("home_team_id")), T.get(x.get("away_team_id"))))
+                if not g or (g["id"] in market and g["state"] != "pre"):
+                    continue
+                mk = x.get("markets") or {}
+
+                def ml(book):
+                    return {o["side"]: o for o in ((mk.get(book) or {}).get("event") or {}).get("moneyline") or []}
+                cons, opn = ml("15"), ml("30")
+                if "home" not in cons or "away" not in cons:
+                    continue
+
+                def pct(side, kind):
+                    return (((cons[side].get("bet_info") or {}).get(kind)) or {}).get("percent")
+                ih, ia = american_prob(cons["home"]["odds"]), american_prob(cons["away"]["odds"])
+                market[g["id"]] = {
+                    "ml_h": cons["home"]["odds"], "ml_a": cons["away"]["odds"],
+                    "open_h": (opn.get("home") or {}).get("odds"), "open_a": (opn.get("away") or {}).get("odds"),
+                    "p_h": round(ih / (ih + ia), 4),      # probabilidad sin comision
+                    "tickets_h": pct("home", "tickets"), "tickets_a": pct("away", "tickets"),
+                    "money_h": pct("home", "money"), "money_a": pct("away", "money"),
+                }
+    save_json(path, market)
+    return market
 
 
 QB_PENALTY = {"Out": 5.0, "Doubtful": 3.5, "Questionable": 1.0}
@@ -561,7 +617,7 @@ def situational(g, margin, adj):
             adj["notes"].append(f"✈️ {a} viaja de la costa del Pacifico y juega temprano ({et_hour}:00 ET): -{TRAVEL_POINTS:g} pt")
 
 
-def predict(g, ts, league, O, D, elo, weeks_played, adj=None):
+def predict(g, ts, league, O, D, elo, weeks_played, adj=None, market=None):
     adj = adj or {"home": 0.0, "away": 0.0, "notes": []}
     h, a = g["home"]["abbr"], g["away"]["abbr"]
     H = ts.get(h) or neutral_team(league)
@@ -597,6 +653,12 @@ def predict(g, ts, league, O, D, elo, weeks_played, adj=None):
     adj = {"home": adj["home"], "away": adj["away"], "notes": list(adj["notes"])}
     situational(g, sum(w[k] * m for k, _, m, _, _ in raw) + hfa + adj["home"] - adj["away"], adj)
     adj_m, adj_t = adj["home"] - adj["away"], adj["home"] + adj["away"]
+    if market and market.get("p_h"):
+        # 5) Las Vegas: el momio ya incluye local, lesiones y clima -> no se le suman nuestros ajustes
+        m_v = SIGMA * NormalDist().inv_cdf(min(max(market["p_h"], 0.01), 0.99))
+        raw.append(("vegas", "Las Vegas (moneyline)", m_v - hfa - adj_m, None, None))
+        w = {k: v * (1 - VEGAS_WEIGHT) for k, v in w.items()}
+        w["vegas"] = VEGAS_WEIGHT
     models = []
     for key, name, m, sh, sa in raw:
         mh = m + hfa + adj_m
@@ -650,6 +712,9 @@ def grade(g, p):
     return r
 
 
+MODEL_KEYS = list(BASE_WEIGHTS) + ["vegas"]
+
+
 def summarize(results):
     graded = [r for r in results if r and not r.get("tie")]
     n = len(graded)
@@ -658,7 +723,8 @@ def summarize(results):
     s = {"n": n, "correct": sum(r["correct"] for r in graded),
          "mae": round(sum(r["err_margin"] for r in graded) / n, 1),
          "mae_total": round(sum(r["err_total"] for r in graded) / n, 1),
-         "models": {k: sum(r["models"][k] for r in graded) for k in BASE_WEIGHTS}}
+         "models": {k: sum(r["models"].get(k, False) for r in graded) for k in MODEL_KEYS},
+         "models_n": {k: sum(k in r["models"] for r in graded) for k in MODEL_KEYS}}
     v = [r["vegas"] for r in graded if "vegas" in r]
     if v:
         s["vegas_n"], s["vegas_correct"] = len(v), sum(v)
@@ -724,6 +790,7 @@ def main():
     pending = [k for k in keys if not all(g["final"] for g in by_key[k])]
     current = pending[0] if pending else keys[-1]
     extras = fetch_extras(season, by_key[current])
+    market = fetch_market(season, [g for g in games if g["key"] <= current])
     rest = rest_days(games)
 
     teams_meta = {}
@@ -742,10 +809,11 @@ def main():
         wk_games, results = [], []
         for g in sorted(by_key[k], key=lambda g: g["date"]):
             ex = extras.get(g["id"])
-            p = predict(g, ts, league, O, D, elo, weeks_played, auto_adjust(g, ex, rest, {t: v["g"] for t, v in ts.items()}))
+            p = predict(g, ts, league, O, D, elo, weeks_played, auto_adjust(g, ex, rest, {t: v["g"] for t, v in ts.items()}),
+                        market.get(g["id"]))
             r = grade(g, p)
             results.append(r)
-            wk_games.append({**g, "pred": p, "result": r, "extra": ex})
+            wk_games.append({**g, "pred": p, "result": r, "extra": ex, "market": market.get(g["id"])})
         if wk_games[0]["stype"] == 2:
             playing = {t for g in wk_games for t in (g["home"]["abbr"], g["away"]["abbr"])}
             bye = sorted(set(teams_meta) - playing)
@@ -779,7 +847,7 @@ def main():
         "generated": now.isoformat(timespec="seconds"),
         "season": season, "current_key": current, "teams": teams_out, "weeks": weeks_out,
         "league": league_now, "season_summary": summarize([r for r, _ in all_results]), "by_level": by_level,
-        "params": {"hfa": HFA_POINTS, "sigma": SIGMA, "prior_games": PRIOR_GAMES, "weights": BASE_WEIGHTS,
+        "params": {"hfa": HFA_POINTS, "sigma": SIGMA, "prior_games": PRIOR_GAMES, "weights": BASE_WEIGHTS, "vegas_weight": VEGAS_WEIGHT,
                    "elo_k": ELO_K, "elo_hfa": ELO_HFA, "pyth_exp": PYTH_EXP},
     }
     os.makedirs(DATA_DIR, exist_ok=True)

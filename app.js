@@ -10,7 +10,7 @@ if (!D) {
   throw new Error('sin datos');
 }
 
-const MODEL_NAMES = {ppp:'Puntos por jugada (tu fórmula)', srs:'SRS ajustado por rival', elo:'Elo', pyth:'Pitagórico'};
+const MODEL_NAMES = {ppp:'Puntos por jugada (tu fórmula)', srs:'SRS ajustado por rival', elo:'Elo', pyth:'Pitagórico', vegas:'Las Vegas (moneyline)'};
 const dt = new Date(D.generated);
 const fmtDate = (d, o) => d.toLocaleString('es-MX', o);
 $('#season').textContent = D.season;
@@ -64,12 +64,14 @@ function view(g){
   const p = g.pred, man = getMan(g.id), H = g.home.abbr, A = g.away.abbr;
   const dh = (man.h || 0) - (useAuto ? 0 : p.adj.home), da = (man.a || 0) - (useAuto ? 0 : p.adj.away);
   const dm = dh - da, dt = dh + da;
-  const models = p.models.map(m => ({...m, margin: m.margin + dm,
+  const vm = (man.h || 0) - (man.a || 0);   // al modelo de Vegas solo se le suman tus ajustes manuales
+  const models = p.models.map(m => ({...m, margin: m.margin + (m.key === 'vegas' ? vm : dm),
     hs: m.hs != null ? m.hs + dh : null, as: m.as != null ? m.as + da : null}));
   models.forEach(m => { m.prob_home = Phi(m.margin / SIG); m.pick = m.margin >= 0 ? H : A; });
   let margin, total;
   if (model === 'cons') { margin = p.margin + dm; total = p.total + dt; }
-  else { const m = models.find(x => x.key === model); margin = m.margin; total = m.hs != null ? m.hs + m.as : p.total + dt; }
+  else { const m = models.find(x => x.key === model) || models.find(x => x.key === 'elo');
+    margin = m.margin; total = m.hs != null ? m.hs + m.as : p.total + dt; }
   const prob_home = Phi(margin / SIG), pick = margin >= 0 ? H : A;
   const agree = models.filter(m => m.pick === pick).length / models.length;
   const mean = models.reduce((s, m) => s + m.margin, 0) / models.length;
@@ -156,7 +158,8 @@ function gameCard({g, v}){
   const ex = g.extra || {};
   const notes = useAuto ? p.adj.notes : [];
   const refs = [];
-  if (g.odds) refs.push(`Las Vegas: <b>${esc(g.odds)}</b>${g.ou ? ` · O/U ${esc(g.ou)}` : ''}`);
+  if (g.market) refs.push(`Las Vegas (moneyline): ${A} <b>${fmtML(g.market.ml_a)}</b> · ${H} <b>${fmtML(g.market.ml_h)}</b> → ${H} ${Math.round(g.market.p_h * 100)}%`);
+  else if (g.odds) refs.push(`Las Vegas: <b>${esc(g.odds)}</b>`);
   if (ex.fpi_home != null) refs.push(`ESPN FPI: ${ex.fpi_home >= ex.fpi_away ? H + ' ' + fx(ex.fpi_home,0) : A + ' ' + fx(ex.fpi_away,0)}%`);
   const wx = weatherHtml(g);
   const models = v.models.map(m => `<tr ${m.key===model?'style="background:#eef3fb;font-weight:600"':''}><td>${esc(MODEL_NAMES[m.key])}</td>
@@ -396,18 +399,21 @@ function lineChart(labels, series, {min = 0, max = 100, refs = [], suffix = '%'}
   });
   return s + '</svg>';
 }
-const MODEL_COLORS = {cons: '#D50A0A', ppp: '#013369', srs: '#11845b', elo: '#d98c00', pyth: '#7a4fb5'};
+const MODEL_COLORS = {cons: '#D50A0A', ppp: '#013369', srs: '#11845b', elo: '#d98c00', pyth: '#7a4fb5', vegas: '#8d6e63'};
 const legend = items => `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;margin:4px 0 8px">${items.map(([n, c, w]) => `<span style="display:inline-flex;align-items:center;gap:6px"><i style="display:inline-block;width:18px;height:${w > 2 ? 4 : 3}px;border-radius:2px;background:${c}"></i>${esc(n)}</span>`).join('')}</div>`;
+
+const mN = (s, k) => (s.models_n ? s.models_n[k] : s.n) || 0;   // partidos evaluados por modelo
+function fmtML(o){ return o == null ? '—' : (o > 0 ? '+' : '') + o; }
 
 function accCharts(wk){
   if (!wk.length) return '';
   const labels = wk.map(w => w.label.replace('Semana ', 'S'));
   const weekly = [{name: 'Consenso', color: MODEL_COLORS.cons, w: 3.5, label: true, data: wk.map(w => 100 * w.summary.correct / w.summary.n)}]
-    .concat(Object.keys(MODEL_NAMES).map(k => ({name: MODEL_NAMES[k], color: MODEL_COLORS[k], w: 2, data: wk.map(w => 100 * w.summary.models[k] / w.summary.n)})));
+    .concat(Object.keys(MODEL_NAMES).map(k => ({name: MODEL_NAMES[k], color: MODEL_COLORS[k], w: 2, data: wk.map(w => mN(w.summary, k) ? 100 * w.summary.models[k] / mN(w.summary, k) : null)})));
   // acumulado de la temporada
-  const cum = (getC) => { let c = 0, n = 0; return wk.map(w => { c += getC(w); n += w.summary.n; return 100 * c / n; }); };
+  const cum = (getC, getN = w => w.summary.n) => { let c = 0, n = 0; return wk.map(w => { c += getC(w); n += getN(w); return n ? 100 * c / n : null; }); };
   const cumul = [{name: 'Consenso', color: MODEL_COLORS.cons, w: 3.5, label: true, data: cum(w => w.summary.correct)}]
-    .concat(Object.keys(MODEL_NAMES).map(k => ({name: MODEL_NAMES[k], color: MODEL_COLORS[k], w: 2, data: cum(w => w.summary.models[k])})));
+    .concat(Object.keys(MODEL_NAMES).map(k => ({name: MODEL_NAMES[k], color: MODEL_COLORS[k], w: 2, data: cum(w => w.summary.models[k] || 0, w => mN(w.summary, k))})));
   const leg = legend([['Consenso', MODEL_COLORS.cons, 4], ...Object.keys(MODEL_NAMES).map(k => [MODEL_NAMES[k], MODEL_COLORS[k], 2])]);
   const refs = [{v: 50, t: 'Volado 50%', c: '#9aa3b2'}, {v: 65, t: 'Experto ~65%', c: '#11845b'}];
   return `<div class="card"><h3>Aciertos por jornada</h3>${leg}${lineChart(labels, weekly, {refs})}
@@ -419,7 +425,7 @@ function accCharts(wk){
 function renderAcc(){
   const s = D.season_summary;
   if (!s) { $('#tab-acc').innerHTML = '<div class="empty">Aún no hay partidos terminados para medir la precisión.</div>'; return; }
-  const models = Object.entries(s.models).sort((a,b) => b[1]-a[1]);
+  const models = Object.entries(s.models).filter(([k]) => mN(s, k)).sort((a,b) => b[1]/mN(s,b[0]) - a[1]/mN(s,a[0]));
   const best = models[0][1];
   const lv = D.by_level;
   const wk = D.weeks.filter(w => w.summary);
@@ -446,12 +452,12 @@ function renderAcc(){
     </div>
     <div class="card"><h3>Precisión por modelo</h3>
       <div class="hbar best"><span><b>Consenso (predicción final)</b></span><div class="track"><i style="width:${100*s.correct/s.n}%"></i></div><b>${pct(s.correct, s.n)}</b></div>
-      ${models.map(([k,v]) => `<div class="hbar"><span>${MODEL_NAMES[k]}</span><div class="track"><i style="width:${100*v/s.n}%"></i></div><b>${pct(v, s.n)}</b></div>`).join('')}
+      ${models.map(([k,v]) => `<div class="hbar"><span>${MODEL_NAMES[k]}</span><div class="track"><i style="width:${100*v/mN(s,k)}%"></i></div><b>${pct(v, mN(s,k))}</b></div>`).join('')}
     </div>
     <div class="card"><h3>Jornada por jornada</h3><div class="tscroll"><table class="st">
       <tr><th>Jornada</th><th>Aciertos</th><th>%</th>${Object.keys(MODEL_NAMES).map(k=>`<th>${MODEL_NAMES[k].split(' (')[0]}</th>`).join('')}<th>Error margen</th></tr>
       ${wk.map(w => `<tr><td>${esc(w.label)}</td><td>${w.summary.correct}/${w.summary.n}</td><td>${pct(w.summary.correct,w.summary.n)}</td>
-        ${Object.keys(MODEL_NAMES).map(k=>`<td>${w.summary.models[k]}/${w.summary.n}</td>`).join('')}<td>${fx(w.summary.mae)}</td></tr>`).join('')}
+        ${Object.keys(MODEL_NAMES).map(k=>`<td>${mN(w.summary,k) ? w.summary.models[k] + '/' + mN(w.summary,k) : '—'}</td>`).join('')}<td>${fx(w.summary.mae)}</td></tr>`).join('')}
     </table></div>
     <p class="hint">Referencia: los mejores modelos públicos aciertan alrededor de 63–68% de los ganadores en una temporada completa.</p></div>`;
 }
@@ -568,3 +574,113 @@ async function runUpdate(){
     li.forEach(x => { if (x.className === 'run') x.className = 'bad'; });
   }
 }
+
+// ---------- Las Vegas (moneyline, % del publico, sorpresas) ----------
+const vgSel = $('#vgWeek');
+let vgKey = D.current_key;
+vgSel.innerHTML = D.weeks.map(w => `<option value="${w.key}">${esc(w.label)}</option>`).join('');
+vgSel.value = vgKey;
+vgSel.onchange = () => { vgKey = +vgSel.value; renderVegas(); };
+
+function american(o){ o = +o; return o > 0 ? 100 / (o + 100) : -o / (-o + 100); }
+function surprise(pw){   // pw = probabilidad que Vegas le daba al ganador
+  const s = Math.round((1 - pw) * 100);
+  if (pw < 0.25) return {s, cls: 's-boom', t: '💥 Batacazo'};
+  if (pw < 0.40) return {s, cls: 's-sur', t: '😮 Sorpresa'};
+  if (pw < 0.50) return {s, cls: 's-mild', t: 'Ligera sorpresa'};
+  if (pw < 0.75) return {s, cls: 's-exp', t: 'Resultado esperado'};
+  return {s, cls: 's-sure', t: '✔ Muy esperado'};
+}
+function marketRes(g){
+  const m = g.market; if (!m || !g.final || g.hs === g.as) return null;
+  const homeWon = g.hs > g.as, pw = homeWon ? m.p_h : 1 - m.p_h;
+  const side = (h, a) => h == null || a == null || h === a ? null : (h > a) === homeWon;
+  return {homeWon, pw, sur: surprise(pw), fav: pw > 0.5,
+    pub: side(m.tickets_h, m.tickets_a), money: side(m.money_h, m.money_a)};
+}
+function vgBar(label, a, h, ac, hc){
+  if (a == null || h == null) return '';
+  return `<div class="vg-bl"><span><b>${a}%</b></span><span>${label}</span><span><b>${h}%</b></span></div>
+    <div class="vg-bar"><i style="width:${a}%;background:${ac}"></i><i style="width:${h}%;background:${hc}"></i></div>`;
+}
+function vgCard(g){
+  const m = g.market, H = g.home.abbr, A = g.away.abbr, T = D.teams, [hc, ac] = barColors(g);
+  const when = fmtDate(new Date(g.date), {weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit'});
+  if (!m) return `<article class="game"><div class="ghead"><span>${when}</span></div><div class="vg-ins" style="padding-bottom:14px">${esc(g.away.name)} @ ${esc(g.home.name)}: todavía no hay momios publicados.</div></article>`;
+  const ph = Math.round(m.p_h * 100), pa = 100 - ph;
+  const team = (side, ml, open, p) => {
+    const t = g[side];
+    return `<div class="vg-team ${p > 50 ? 'fav' : ''}"><img src="${esc(t.logo)}" alt="" loading="lazy">
+      <div class="tname">${esc(t.name)}<small>${p > 50 ? 'Favorito' : 'No favorito'} · ${p}% de ganar</small></div>
+      <div class="ml">${fmtML(ml)}${open != null && open !== ml ? `<small>abrió ${fmtML(open)}</small>` : ''}</div></div>`;
+  };
+  const ins = [];
+  const name = ab => T[ab]?.short || ab;
+  for (const [ab, mo, ti] of [[H, m.money_h, m.tickets_h], [A, m.money_a, m.tickets_a]])
+    if (mo != null && ti != null && mo - ti >= 10) ins.push(`💰 Dinero fuerte en <b>${name(ab)}</b>: ${mo}% del dinero con solo ${ti}% de las apuestas (apostadores grandes).`);
+  for (const [ab, ti] of [[H, m.tickets_h], [A, m.tickets_a]])
+    if (ti != null && ti >= 75) ins.push(`👥 El público está muy cargado a <b>${name(ab)}</b> (${ti}% de las apuestas).`);
+  if (m.open_h != null && m.open_a != null) {
+    const ih = american(m.open_h), ia = american(m.open_a), po = ih / (ih + ia), d = m.p_h - po;
+    if (Math.abs(d) >= 0.04) {
+      const to = d > 0 ? H : A, pubSide = (m.tickets_h ?? 50) >= (m.tickets_a ?? 50) ? H : A;
+      ins.push(`📈 La línea se movió hacia <b>${name(to)}</b> (de ${Math.round((d > 0 ? po : 1 - po) * 100)}% a ${Math.round((d > 0 ? m.p_h : 1 - m.p_h) * 100)}%)` +
+        (to !== pubSide ? ' — <b>en contra del público</b>, señal de dinero profesional.' : '.'));
+    }
+  }
+  const v = view(g), mp = v.prob_home, diff = mp - m.p_h;
+  if (model !== 'vegas' && Math.abs(diff) >= 0.07) {
+    const ab = diff > 0 ? H : A;
+    ins.push(`🎯 Nuestro modelo ve a <b>${name(ab)}</b> con ${Math.round((diff > 0 ? mp : 1 - mp) * 100)}% vs ${Math.round((diff > 0 ? m.p_h : 1 - m.p_h) * 100)}% de Vegas.`);
+  }
+  const r = marketRes(g);
+  let res = '';
+  if (r) {
+    const w = r.homeWon ? g.home : g.away;
+    res = `<div class="vg-res"><span class="sbadge ${r.sur.cls}">${r.sur.t}</span> Ganó <b>${esc(w.short || w.name)}</b> ${Math.max(g.hs, g.as)}-${Math.min(g.hs, g.as)}.
+      Vegas le daba ${Math.round(r.pw * 100)}% · sorpresa ${r.sur.s}/100.
+      ${r.pub != null ? `<br>El público ${r.pub ? 'acertó ✓' : 'falló ✗'}${r.money != null ? ` · el dinero ${r.money ? 'acertó ✓' : 'falló ✗'}` : ''}` : ''}</div>`;
+  } else if (g.final) res = `<div class="vg-res">Empate ${g.hs}-${g.as}.</div>`;
+  return `<article class="game">
+    <div class="ghead"><span>${g.final ? 'Final' : g.state === 'in' ? '<span class="live">● EN VIVO</span>' : when}</span><span>${esc(g.tv || '')}</span></div>
+    ${team('away', m.ml_a, m.open_a, pa)}${team('home', m.ml_h, m.open_h, ph)}
+    <div class="vg-bars">
+      ${vgBar('Probabilidad según Vegas', pa, ph, ac, hc)}
+      ${vgBar('% de apuestas (gente)', m.tickets_a, m.tickets_h, ac, hc)}
+      ${vgBar('% del dinero', m.money_a, m.money_h, ac, hc)}
+    </div>
+    ${ins.length ? `<div class="vg-ins">${ins.map(x => `<div>${x}</div>`).join('')}</div>` : ''}
+    ${res || '<div style="height:14px"></div>'}
+  </article>`;
+}
+function vgStats(games){
+  const rs = games.map(marketRes).filter(Boolean);
+  const cnt = (f) => { const x = rs.filter(r => r[f] != null); return [x.filter(r => r[f]).length, x.length]; };
+  return {rs, fav: cnt('fav'), pub: cnt('pub'), money: cnt('money')};
+}
+function renderVegas(){
+  const w = D.weeks.find(x => x.key === vgKey);
+  const st = vgStats(w.games);
+  const big = w.games.filter(g => marketRes(g)).sort((a, b) => marketRes(a).pw - marketRes(b).pw)[0];
+  const tile = (v, l, r) => `<div class="tile ${r ? 'r' : ''}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  $('#vgTiles').innerHTML = st.rs.length ? [
+    tile(`${st.fav[0]}/${st.fav[1]}`, 'Favoritos de Vegas que ganaron', true),
+    tile(`${st.pub[0]}/${st.pub[1]}`, 'El público (más apuestas) acertó'),
+    tile(`${st.money[0]}/${st.money[1]}`, 'El dinero (más $) acertó'),
+    big ? tile(`${esc(big.hs > big.as ? big.home.abbr : big.away.abbr)} ${Math.round(marketRes(big).pw * 100)}%`, 'Mayor sorpresa de la jornada (prob. que le daba Vegas)') : ''
+  ].join('') : '';
+  $('#vgGames').innerHTML = [...w.games].sort((a, b) => new Date(a.date) - new Date(b.date)).map(vgCard).join('');
+  const all = D.weeks.flatMap(x => x.games.map(g => ({g, w: x})));
+  const ss = vgStats(all.map(x => x.g));
+  const top = all.filter(x => marketRes(x.g)).sort((a, b) => marketRes(a.g).pw - marketRes(b.g).pw).slice(0, 10);
+  $('#vgSeason').innerHTML = `<h3>Temporada: las 10 mayores sorpresas</h3>
+    <p style="margin:0 0 10px">Favoritos de Vegas: <b>${ss.fav[0]} de ${ss.fav[1]}</b> (${pct(ss.fav[0], ss.fav[1])}) ·
+      El público acertó <b>${pct(ss.pub[0], ss.pub[1])}</b> · El dinero acertó <b>${pct(ss.money[0], ss.money[1])}</b></p>
+    <div class="tscroll"><table class="st"><tr><th>Jornada</th><th>Ganador</th><th>Perdedor</th><th>Marcador</th><th>Momio ganador</th><th>Vegas le daba</th><th>Sorpresa</th></tr>
+    ${top.map(({g, w}) => { const r = marketRes(g), W = r.homeWon ? g.home : g.away, L = r.homeWon ? g.away : g.home;
+      return `<tr><td>${esc(w.label)}</td><td class="tm"><img src="${esc(W.logo)}" alt="">${esc(W.short || W.name)}</td><td>${esc(L.short || L.name)}</td>
+        <td>${Math.max(g.hs, g.as)}-${Math.min(g.hs, g.as)}</td><td>${fmtML(r.homeWon ? g.market.ml_h : g.market.ml_a)}</td>
+        <td>${Math.round(r.pw * 100)}%</td><td><span class="sbadge ${r.sur.cls}">${r.sur.s}</span></td></tr>`; }).join('')}
+    </table></div>`;
+}
+renderVegas();
