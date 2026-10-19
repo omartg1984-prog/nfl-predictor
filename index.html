@@ -130,6 +130,13 @@ summary{cursor:pointer;color:var(--navy);font-weight:600;font-size:13px}
 .lock-card button:hover{background:var(--red)}
 .lock-err{color:var(--bad);font-weight:600;font-size:13.5px;min-height:20px;margin-top:10px}
 /* las vegas */
+.ua{border-top:1px solid var(--line);padding:10px 0}
+.ua-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.ua-h img{width:28px;height:28px}
+.ua-h .ml-s{font-family:var(--head);color:var(--navy);font-size:17px}
+.ua-h .muted{color:var(--muted);font-size:13px}
+.ua-h .ok{color:var(--good)}.ua-h .no{color:var(--bad)}
+.ua ul{margin:6px 0 0;padding-left:22px;font-size:13px;line-height:1.55}
 .vg-team{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;padding:8px 14px}
 .vg-team img{width:36px;height:36px}
 .vg-team .ml{font-family:var(--head);font-size:22px;color:var(--navy);text-align:right;line-height:1.1}
@@ -287,6 +294,7 @@ table.st td.tm img{width:26px;height:26px}
     <div class="pk-tools"><label>Jornada: <select id="vgWeek"></select></label>
       <span class="hint" style="margin:0">Solo moneyline (quién gana). Momios de consenso; % del público de Action Network.</span></div>
     <div class="tiles" id="vgTiles"></div>
+    <div id="vgAlerts"></div>
     <div class="grid" id="vgGames"></div>
     <div class="card" id="vgSeason" style="margin-top:18px"></div>
     <div class="card how">
@@ -296,6 +304,7 @@ table.st td.tm img{width:26px;height:26px}
         <li><b>% de apuestas</b> es cuánta gente (boletos) le va a cada equipo. <b>% del dinero</b> es cuánto dinero. Si un equipo tiene mucho más dinero que boletos, lo están apostando pocos apostadores grandes, que suelen ser profesionales.</li>
         <li><b>Movimiento de línea:</b> compara el momio de apertura con el actual. Si la línea se mueve en contra del equipo que apoya el público, normalmente es dinero profesional.</li>
         <li><b>Sorpresa:</b> 100 menos la probabilidad que Vegas le daba al ganador. Un no favorito de +300 que gana es una sorpresa de ~75.</li>
+        <li><b>🚨 Alerta de sorpresa (0–100):</b> para cada no favorito de Vegas suma señales a su favor: nuestros modelos le dan más probabilidad que Vegas (hasta 30), cuántos de nuestros modelos lo eligen (22), dinero profesional, es decir más % de dinero que de apuestas (15), línea moviéndose hacia él sobre todo si el público va con el favorito (15), público muy cargado al favorito (8) y ajustes a su favor como bye, QB del rival o viaje (10). Alta = 55+, Media = 35–54. Abajo de las alertas está su historial real de la temporada.</li>
         <li><b>En la predicción:</b> el moneyline entra como 5º modelo con 25% del peso del Consenso. También puedes elegir "Las Vegas" en el selector de modelo de Predicciones y Mis Picks.</li>
       </ul>
     </div>

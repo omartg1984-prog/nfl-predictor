@@ -180,6 +180,7 @@ function gameCard({g, v}){
     </div>
     ${res}
     <div class="info">
+      ${(u => u && u.sc >= 35 ? `<div class="adj" style="color:#b71c1c">🚨 Alerta de sorpresa ${u.sc}/100: ${esc(u.dogN)} (Vegas le da ${pc(u.pv)}, nuestros modelos ${pc(u.pm)}). Detalles en la pestaña Las Vegas.</div>` : '')(upsetInfo(g))}
       ${notes.map(n => `<div class="adj">${esc(n)}</div>`).join('')}
       ${v.manual ? `<div class="man">✎ Tu ajuste: ${A} ${v.man.a>0?'+':''}${v.man.a||0}, ${H} ${v.man.h>0?'+':''}${v.man.h||0}</div>` : ''}
       ${wx ? `<div>${wx}</div>` : ''}
@@ -287,7 +288,7 @@ function renderPicks(){
       const cls = ['pk-team', sel ? 'sel' : '', sel && res === true ? 'ok' : '', sel && res === false ? 'no' : '', sel && ovr ? 'ovr' : ''].join(' ');
       const sc = g.final ? (side === 'home' ? g.hs : g.as) : Math.round(side === 'home' ? v.hs : v.as);
       return `<button class="${cls}" data-id="${g.id}" data-t="${t.abbr}" ${g.final ? 'disabled' : ''}>
-        <img src="${esc(t.logo)}" alt="" crossorigin="anonymous"><span>${esc(t.short || t.name)}</span><em>${sc}${g.final ? '' : ' pron.'}</em></button>`;
+        <img src="${esc(t.logo)}" alt="" crossorigin="anonymous"><span>${esc(t.short || t.name)}${(u => u && u.dog === t.abbr && u.sc >= 35 ? ` <b title="Alerta de sorpresa ${u.sc}/100">🚨</b>` : '')(upsetInfo(g))}</span><em>${sc}${g.final ? '' : ' pron.'}</em></button>`;
     };
     const ph = Math.round(v.prob_home * 100), pa = 100 - ph, [hc, ac] = barColors(g);
     html += `<div class="pk-row">${btn('away')}<div class="pk-at">@</div>${btn('home')}<div class="pk-pts ${res === false ? 'lost' : ''}">${v.pts}</div>
@@ -669,6 +670,7 @@ function renderVegas(){
     tile(`${st.money[0]}/${st.money[1]}`, 'El dinero (más $) acertó'),
     big ? tile(`${esc(big.hs > big.as ? big.home.abbr : big.away.abbr)} ${Math.round(marketRes(big).pw * 100)}%`, 'Mayor sorpresa de la jornada (prob. que le daba Vegas)') : ''
   ].join('') : '';
+  $('#vgAlerts').innerHTML = upsetCard(w);
   $('#vgGames').innerHTML = [...w.games].sort((a, b) => new Date(a.date) - new Date(b.date)).map(vgCard).join('');
   const all = D.weeks.flatMap(x => x.games.map(g => ({g, w: x})));
   const ss = vgStats(all.map(x => x.g));
@@ -683,4 +685,84 @@ function renderVegas(){
         <td>${Math.round(r.pw * 100)}%</td><td><span class="sbadge ${r.sur.cls}">${r.sur.s}</span></td></tr>`; }).join('')}
     </table></div>`;
 }
+// ---------- Alerta de sorpresa: no favoritos de Vegas con señales a su favor ----------
+function pc(x){ return Math.round(x * 100) + "%"; }
+function upsetInfo(g){
+  const m = g.market; if (!m) return null;
+  const H = g.home.abbr, A = g.away.abbr, dogHome = m.p_h < 0.5;
+  const dog = dogHome ? H : A, fav = dogHome ? A : H;
+  const dogN = D.teams[dog]?.short || dog, favN = D.teams[fav]?.short || fav;
+  const pv = dogHome ? m.p_h : 1 - m.p_h;            // prob. de Vegas para el no favorito
+  if (pv < 0.12 || pv > 0.49) return null;           // ni partidos parejos ni batacazos imposibles
+  const v = view(g), ms = v.models.filter(x => x.key !== 'vegas');
+  const tw = ms.reduce((s, x) => s + x.weight, 0) || 1;
+  const pmH = Phi(ms.reduce((s, x) => s + x.weight * x.margin, 0) / tw / SIG);
+  const pm = dogHome ? pmH : 1 - pmH;                 // prob. de nuestros modelos (sin Vegas)
+  const why = []; let sc = 0;
+  // 1) nuestros modelos ven al no favorito mejor que Vegas (hasta 30)
+  const val = pm - pv;
+  if (val > 0) {
+    sc += Math.min(1, val / 0.15) * 30;
+    if (val >= 0.04) why.push(`🎯 Nuestros modelos le dan <b>${pc(pm)}</b> de ganar; Vegas solo ${pc(pv)}.`);
+  }
+  // 2) cuantos de nuestros modelos lo eligen (hasta 22)
+  const nDog = ms.filter(x => x.pick === dog).length;
+  sc += [0, 5, 12, 18, 22][Math.min(4, nDog)];
+  if (nDog) why.push(`🧮 ${nDog} de ${ms.length} modelos lo eligen como ganador.`);
+  // 3) dinero profesional: mas % de dinero que de apuestas (hasta 15)
+  const tD = dogHome ? m.tickets_h : m.tickets_a, mD = dogHome ? m.money_h : m.money_a;
+  if (tD != null && mD != null && mD - tD >= 5) {
+    sc += Math.min(1, (mD - tD) / 20) * 15;
+    why.push(`💰 Tiene ${mD}% del dinero con solo ${tD}% de las apuestas: apostadores grandes con ${dogN}.`);
+  }
+  // 4) publico muy cargado al favorito (hasta 8)
+  const tF = tD != null ? 100 - tD : null;
+  if (tF != null && tF >= 75) {
+    sc += tF >= 85 ? 8 : 5;
+    why.push(`👥 ${tF}% del público va con ${favN}.`);
+  }
+  // 5) la linea se movio hacia el no favorito, sobre todo si el publico va con el favorito (hasta 15)
+  if (m.open_h != null && m.open_a != null) {
+    const ih = american(m.open_h), ia = american(m.open_a), poH = ih / (ih + ia), po = dogHome ? poH : 1 - poH;
+    if (pv - po >= 0.03) {
+      const contra = tF != null && tF > 50;
+      sc += 10 + (contra ? 5 : 0);
+      why.push(`📈 La línea se movió hacia ${dogN} (de ${pc(po)} a ${pc(pv)})${contra ? ', <b>aunque el público va con el favorito</b>' : ''}.`);
+    }
+  }
+  // 6) factores situacionales a su favor: descanso, QB del rival, division, viaje (hasta 10)
+  if (useAuto) {
+    const a = g.pred.adj, net = dogHome ? a.home - a.away : a.away - a.home;
+    if (net >= 0.5) {
+      sc += Math.min(1, net / 3) * 10;
+      const ns = a.notes.filter(n => !/Viento|lluvia|Lluvia|Frio/.test(n)).map(n => n.replace(/:.*$/, ''));
+      why.push(`⚙️ Ajustes a su favor (+${fx(net)} pts)${ns.length ? ': ' + ns.join('; ') : ''}.`);
+    }
+  }
+  sc = Math.round(Math.min(100, sc));
+  const won = g.final && g.hs !== g.as ? ((g.hs > g.as) === dogHome) : null;
+  return {g, dog, fav, dogN, favN, dogHome, pv, pm, est: (pv + pm) / 2, sc, why, won,
+    ml: dogHome ? m.ml_h : m.ml_a, level: sc >= 55 ? 'Alta' : sc >= 35 ? 'Media' : 'Baja'};
+}
+function upsetBadge(u){
+  const cls = u.level === 'Alta' ? 's-boom' : u.level === 'Media' ? 's-sur' : 's-sure';
+  return `<span class="sbadge ${cls}">🚨 ${u.sc}</span>`;
+}
+function upsetCard(w){
+  const us = w.games.map(upsetInfo).filter(u => u && u.sc >= 35).sort((a, b) => b.sc - a.sc);
+  const all = D.weeks.flatMap(x => x.games.map(upsetInfo)).filter(u => u && u.won != null);
+  const rec = lvl => { const x = all.filter(u => u.level === lvl); return x.length ? `${x.filter(u => u.won).length} de ${x.length} (${pct(x.filter(u => u.won).length, x.length)}; Vegas esperaba ${pc(x.reduce((s, u) => s + u.pv, 0) / x.length)})` : 'sin casos'; };
+  return `<div class="card"><h3>🚨 Alertas de sorpresa</h3>
+    <p style="margin:0 0 8px">No favoritos de Vegas con señales a su favor: nuestros modelos, dinero profesional, movimiento de línea y factores del partido. Entre más alto el número (0–100), más señales coinciden.</p>
+    ${us.length ? us.map(u => `<div class="ua">
+        <div class="ua-h">${upsetBadge(u)}<img src="${esc(D.teams[u.dog]?.logo)}" alt=""><b>${esc(u.dogN)}</b> <span class="ml-s">${fmtML(u.ml)}</span>
+          <span class="muted">${u.dogHome ? 'vs' : '@'} ${esc(u.favN)}</span><span class="spacer"></span>
+          <span class="muted">Vegas ${pc(u.pv)} · modelos ${pc(u.pm)}</span>
+          ${u.won === true ? '<b class="ok">✓ ¡Dio la sorpresa!</b>' : u.won === false ? '<b class="no">✗ Ganó el favorito</b>' : ''}</div>
+        <ul>${u.why.map(x => `<li>${x}</li>`).join('')}</ul></div>`).join('')
+      : '<p class="hint">No hay no favoritos con suficientes señales en esta jornada.</p>'}
+    <p class="hint">Historial de la temporada: alertas <b>altas</b> (55+) ganaron ${rec('Alta')} · <b>medias</b> (35–54) ganaron ${rec('Media')}.
+      Ojo: aun con alerta alta lo normal es que gane el favorito; úsala para decidir en partidos dudosos o para asignarles pocos puntos de confianza, no como apuesta segura.</p></div>`;
+}
+
 renderVegas();
