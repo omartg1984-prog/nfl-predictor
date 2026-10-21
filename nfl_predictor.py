@@ -335,6 +335,45 @@ def fetch_market(season, games):
     return market
 
 
+def market_stats(games, market):
+    """Quien acierta mas al ganador: favorito de Vegas, el publico (mas apuestas) o el dinero (mas $)."""
+    st = {"n": 0, "fav": 0, "pub_n": 0, "pub": 0, "money_n": 0, "money": 0,
+          "dis_n": 0, "dis_money": 0, "sharp_n": 0, "sharp": 0, "sharp_exp": 0.0,
+          "heavy_n": 0, "heavy": 0, "heavy_exp": 0.0}
+    for g in games:
+        m = market.get(g["id"])
+        if not m or not g["final"] or g["hs"] == g["as"]:
+            continue
+        hw = g["hs"] > g["as"]
+        st["n"] += 1
+        st["fav"] += (m["p_h"] > 0.5) == hw
+        th, ta, mh, ma = m.get("tickets_h"), m.get("tickets_a"), m.get("money_h"), m.get("money_a")
+        if th is None or mh is None:
+            continue
+        if th != ta:
+            st["pub_n"] += 1
+            st["pub"] += (th > ta) == hw
+        if mh != ma:
+            st["money_n"] += 1
+            st["money"] += (mh > ma) == hw
+        if th != ta and mh != ma and (th > ta) != (mh > ma):     # la gente y el dinero no coinciden
+            st["dis_n"] += 1
+            st["dis_money"] += (mh > ma) == hw
+        for side_home, t, mo in ((True, th, mh), (False, ta, ma)):
+            p_side = m["p_h"] if side_home else 1 - m["p_h"]
+            if mo - t >= 10:                                    # dinero fuerte (apostadores grandes)
+                st["sharp_n"] += 1
+                st["sharp"] += side_home == hw
+                st["sharp_exp"] += p_side
+            if t >= 75:                                         # publico muy cargado
+                st["heavy_n"] += 1
+                st["heavy"] += side_home == hw
+                st["heavy_exp"] += p_side
+    st["sharp_exp"] = round(st["sharp_exp"], 2)
+    st["heavy_exp"] = round(st["heavy_exp"], 2)
+    return st
+
+
 QB_PENALTY = {"Out": 5.0, "Doubtful": 3.5, "Questionable": 1.0}
 QB_CHANGE = 5.0          # puntos que vale cambiar del QB titular al suplente
 ATT_PER_GAME = 33.0      # pases intentados por partido de un QB titular
@@ -791,6 +830,10 @@ def main():
     current = pending[0] if pending else keys[-1]
     extras = fetch_extras(season, by_key[current])
     market = fetch_market(season, [g for g in games if g["key"] <= current])
+    mstats = {season: market_stats(games, market)}
+    for y in (season - 2, season - 1):      # temporadas anteriores: solo para medir publico vs dinero
+        hg = [g for g in history if g["season"] == y and g["stype"] == 2]
+        mstats[y] = market_stats(hg, fetch_market(y, hg))
     rest = rest_days(games)
 
     teams_meta = {}
@@ -846,7 +889,7 @@ def main():
     out = {
         "generated": now.isoformat(timespec="seconds"),
         "season": season, "current_key": current, "teams": teams_out, "weeks": weeks_out,
-        "league": league_now, "season_summary": summarize([r for r, _ in all_results]), "by_level": by_level,
+        "league": league_now, "season_summary": summarize([r for r, _ in all_results]), "market_stats": mstats, "by_level": by_level,
         "params": {"hfa": HFA_POINTS, "sigma": SIGMA, "prior_games": PRIOR_GAMES, "weights": BASE_WEIGHTS, "vegas_weight": VEGAS_WEIGHT,
                    "elo_k": ELO_K, "elo_hfa": ELO_HFA, "pyth_exp": PYTH_EXP},
     }

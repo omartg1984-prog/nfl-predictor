@@ -675,6 +675,7 @@ function renderVegas(){
   const all = D.weeks.flatMap(x => x.games.map(g => ({g, w: x})));
   const ss = vgStats(all.map(x => x.g));
   const top = all.filter(x => marketRes(x.g)).sort((a, b) => marketRes(a.g).pw - marketRes(b.g).pw).slice(0, 10);
+  $('#vgPubMoney').innerHTML = pubMoneyCard();
   $('#vgSeason').innerHTML = `<h3>Temporada: las 10 mayores sorpresas</h3>
     <p style="margin:0 0 10px">Favoritos de Vegas: <b>${ss.fav[0]} de ${ss.fav[1]}</b> (${pct(ss.fav[0], ss.fav[1])}) ·
       El público acertó <b>${pct(ss.pub[0], ss.pub[1])}</b> · El dinero acertó <b>${pct(ss.money[0], ss.money[1])}</b></p>
@@ -763,6 +764,52 @@ function upsetCard(w){
       : '<p class="hint">No hay no favoritos con suficientes señales en esta jornada.</p>'}
     <p class="hint">Historial de la temporada: alertas <b>altas</b> (55+) ganaron ${rec('Alta')} · <b>medias</b> (35–54) ganaron ${rec('Media')}.
       Ojo: aun con alerta alta lo normal es que gane el favorito; úsala para decidir en partidos dudosos o para asignarles pocos puntos de confianza, no como apuesta segura.</p></div>`;
+}
+
+// ---------- ¿Quien acierta mas: la gente (apuestas) o el dinero? ----------
+function pubMoneyCard(){
+  const MS = D.market_stats; if (!MS) return '';
+  const yrs = Object.keys(MS).sort();
+  const tot = {};
+  yrs.forEach(y => Object.entries(MS[y]).forEach(([k, v]) => tot[k] = (tot[k] || 0) + v));
+  const P = (a, b) => b ? Math.round(100 * a / b) : null;
+  const cell = (a, b, best) => b ? `<td class="${best ? 'hi' : ''}">${P(a, b)}% <small style="color:var(--muted)">(${a}/${b})</small></td>` : '<td>—</td>';
+  const row = (lab, s, bold) => {
+    const pp = P(s.pub, s.pub_n), pm = P(s.money, s.money_n);
+    return `<tr${bold ? ' style="font-weight:700"' : ''}><td>${lab}</td><td>${s.n}</td>${cell(s.fav, s.n)}${cell(s.pub, s.pub_n, pp > pm)}${cell(s.money, s.money_n, pm > pp)}
+      ${cell(s.dis_money, s.dis_n)}${s.sharp_n ? `<td>${P(s.sharp, s.sharp_n)}% <small style="color:var(--muted)">vs ${P(s.sharp_exp, s.sharp_n)}% esperado</small></td>` : '<td>—</td>'}
+      ${s.heavy_n ? `<td>${P(s.heavy, s.heavy_n)}% <small style="color:var(--muted)">vs ${P(s.heavy_exp, s.heavy_n)}% esperado</small></td>` : '<td>—</td>'}</tr>`;
+  };
+  const pp = P(tot.pub, tot.pub_n), pm = P(tot.money, tot.money_n), dm = P(tot.dis_money, tot.dis_n);
+  const sh = P(tot.sharp, tot.sharp_n), she = P(tot.sharp_exp, tot.sharp_n);
+  const winner = pp === pm ? 'empatan' : pp > pm ? `<b>gana la gente</b> (las apuestas): ${pp}% contra ${pm}% del dinero` : `<b>gana el dinero</b>: ${pm}% contra ${pp}% de la gente`;
+  // grafica acumulada de la temporada actual
+  const wk = D.weeks.filter(w => w.games.some(g => marketRes(g)));
+  let chart = '';
+  if (wk.length) {
+    const acc = f => { let c = 0, n = 0; return wk.map(w => { w.games.map(marketRes).filter(r => r && r[f] != null).forEach(r => { n++; c += r[f] ? 1 : 0; }); return n ? 100 * c / n : null; }); };
+    const series = [
+      {name: 'La gente (más apuestas)', color: '#013369', w: 3, label: true, data: acc('pub')},
+      {name: 'El dinero (más $)', color: '#11845b', w: 3, label: true, data: acc('money')},
+      {name: 'Favorito de Vegas', color: '#D50A0A', w: 2, dash: '6 4', data: acc('fav')}];
+    chart = `<h3 style="margin-top:18px">Temporada ${D.season}: acumulado jornada por jornada</h3>
+      ${legend(series.map(s => [s.name, s.color, s.w]))}
+      ${lineChart(wk.map(w => w.label.replace('Semana ', 'S')), series, {min: 25, max: 100, refs: [{v: 50, t: 'Volado 50%', c: '#9aa3b2'}]})}`;
+  }
+  return `<div class="card"><h3>¿Quién acierta más: la gente o el dinero?</h3>
+    <p style="margin:0 0 6px">En ${yrs.length} temporadas (${tot.n} partidos) eligiendo siempre al equipo con más apuestas contra el equipo con más dinero, ${winner}.</p>
+    <ul style="margin:0 0 10px;padding-left:20px;font-size:14px;line-height:1.6">
+      <li><b>Cuando no coinciden</b> (la gente con un equipo y el dinero con el otro) ganó el lado del dinero ${tot.dis_money} de ${tot.dis_n} veces (${dm}%), así que ${dm < 50 ? 'la gente acertó más' : 'el dinero acertó más'}.</li>
+      <li>¿Por qué? En moneyline la gente casi siempre va con el <b>favorito</b>, que gana la mayoría de las veces. El dinero grande suele ir al <b>no favorito</b> buscando un pago alto.</li>
+      <li><b>Dinero fuerte</b> (10+ puntos más de dinero que de apuestas): ese equipo ganó ${sh}% contra ${she}% que esperaba Vegas. ${sh - she >= 2 ? 'Le gana un poco a lo esperado: sirve como pista para sorpresas, no para elegir ganadores.' : 'Más o menos lo esperado.'}</li>
+    </ul>
+    <div class="tscroll"><table class="st">
+      <tr><th>Temporada</th><th>Partidos</th><th>Favorito Vegas</th><th>La gente</th><th>El dinero</th><th>Dinero cuando no coinciden</th><th>Dinero fuerte</th><th>Público 75%+</th></tr>
+      ${yrs.map(y => row(y + (+y === D.season ? ' (en curso)' : ''), MS[y])).join('')}
+      ${row('Total', tot, true)}
+    </table></div>
+    <p class="hint">"La gente" = el equipo con más % de apuestas (boletos). "El dinero" = el equipo con más % del dinero apostado. Datos de consenso de Action Network, momio de cierre.</p>
+    ${chart}</div>`;
 }
 
 renderVegas();
