@@ -967,7 +967,7 @@ def main():
     pending = [k for k in keys if not all(g["final"] for g in by_key[k])]
     current = pending[0] if pending else keys[-1]
     extras = fetch_extras(season, by_key[current])
-    market = fetch_market(season, [g for g in games if g["key"] <= current])
+    market = fetch_market(season, games)
     mstats = {season: market_stats(games, market)}
     for y in (season - 2, season - 1):      # temporadas anteriores: solo para medir publico vs dinero
         hg = [g for g in history if g["season"] == y and g["stype"] == 2]
@@ -982,7 +982,7 @@ def main():
 
     weeks_out, all_results = [], []
     ppy_all = league_ppy(games, box)
-    for k in [k for k in keys if k <= current]:
+    for k in keys:   # jornadas futuras: preliminares, con las estadisticas de todo lo jugado hasta hoy
         prev = [g for g in games if g["key"] < k and g["final"]]
         ts, league = team_stats(prev, box)
         O, D = srs_ratings(prev, league["ppg"], box)
@@ -1005,7 +1005,7 @@ def main():
         all_results += [(r, g["pred"]["level"]) for r, g in zip(results, wk_games)]
         last_week = max((g["key"] for g in prev), default=None)
         weeks_out.append({
-            "key": k, "label": week_label(wk_games[0]["stype"], wk_games[0]["week"]),
+            "key": k, "label": week_label(wk_games[0]["stype"], wk_games[0]["week"]), "preliminary": k > current,
             "stats_through": week_label(2 if last_week <= 18 else 3, last_week if last_week <= 18 else last_week - 18)
             if last_week else None,
             "games": wk_games, "bye": bye, "summary": summarize(results), "league": league,
@@ -1050,7 +1050,7 @@ def main():
     os.replace(OUT_FILE + ".tmp", OUT_FILE)
     log("  datos cifrados con contrasena" if password else "  datos sin contrasena")
     ss = out["season_summary"]
-    log(f"Listo: jornada actual = {weeks_out[-1]['label']}"
+    log(f"Listo: jornada actual = {next(w['label'] for w in weeks_out if w['key'] == current)}"
         + (f" | aciertos temporada {ss['correct']}/{ss['n']}" if ss else ""))
 
 

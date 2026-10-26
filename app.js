@@ -106,11 +106,14 @@ function weekSummary(vs){
     ptsMax: done.reduce((s, x) => s + x.v.pts, 0)};
 }
 
+function weekTag(w){
+  return w.key === D.current_key ? ' — en curso' : w.preliminary ? ' — preliminar' : w.games.every(g => g.final) ? ' ✓' : '';
+}
 function renderWeeks(){
-  $('#weeks').innerHTML = D.weeks.map(w =>
-    `<button class="chip ${w.key===curKey?'on':''}" data-k="${w.key}">${esc(w.label)}${w.key===D.current_key?'<span class="dot" title="Jornada actual"></span>':''}</button>`).join('');
-  document.querySelectorAll('.chip').forEach(c => c.onclick = () => {curKey = pkKey = +c.dataset.k; store.set('week', curKey); renderWeek();});
-  document.querySelector('.chip.on')?.scrollIntoView({inline:'center', block:'nearest'});
+  const sel = $('#weekSel');
+  sel.innerHTML = D.weeks.map(w => `<option value="${w.key}">${esc(w.label)}${weekTag(w)}</option>`).join('');
+  sel.value = curKey;
+  sel.onchange = () => { curKey = pkKey = +sel.value; store.set('week', curKey); renderWeek(); };
 }
 
 const ST_ES = {Out:'Fuera', Doubtful:'Dudoso', Questionable:'En duda'};
@@ -215,7 +218,9 @@ function renderWeek(){
   renderWeeks();
   const w = D.weeks.find(x => x.key === curKey);
   $('#wtitle').textContent = w.label;
-  $('#wmeta').textContent = (w.stats_through
+  $('#wmeta').textContent = (w.preliminary
+    ? `PRELIMINAR: calculada con estadísticas hasta ${w.stats_through}. Se recalcula sola cada semana conforme se juegan las jornadas; lesiones y clima se agregan en la semana del partido`
+    : w.stats_through
     ? `Predicción basada en estadísticas hasta ${w.stats_through}`
     : `Inicio de temporada: predicción basada en Elo de temporadas anteriores`) + ` · ${w.games.length} partidos · Modelo: ${$('#model').selectedOptions[0].text}`;
   let vs = weekViews(w);
@@ -255,7 +260,7 @@ renderWeek();
 // ---------- pick'em (estilo CBS) ----------
 let pkKey = curKey;
 const pkSel = $('#pkWeek');
-pkSel.innerHTML = D.weeks.map(w => `<option value="${w.key}">${esc(w.label)}</option>`).join('');
+pkSel.innerHTML = D.weeks.map(w => `<option value="${w.key}">${esc(w.label)}${weekTag(w)}</option>`).join('');
 pkSel.onchange = () => { pkKey = +pkSel.value; renderPicks(); };
 const getOvr = id => store.get('pick_' + id);
 const setOvr = (id, v) => { try { v ? localStorage.setItem('pick_' + id, v) : localStorage.removeItem('pick_' + id); } catch {} };
@@ -582,7 +587,7 @@ async function runUpdate(){
 // ---------- Las Vegas (moneyline, % del publico, sorpresas) ----------
 const vgSel = $('#vgWeek');
 let vgKey = D.current_key;
-vgSel.innerHTML = D.weeks.map(w => `<option value="${w.key}">${esc(w.label)}</option>`).join('');
+vgSel.innerHTML = D.weeks.map(w => `<option value="${w.key}">${esc(w.label)}${weekTag(w)}</option>`).join('');
 vgSel.value = vgKey;
 vgSel.onchange = () => { vgKey = +vgSel.value; renderVegas(); };
 

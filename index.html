@@ -129,6 +129,10 @@ summary{cursor:pointer;color:var(--navy);font-weight:600;font-size:13px}
 .lock-card button{width:100%;font-family:var(--head);font-size:18px;letter-spacing:1px;background:var(--navy);color:#fff;border:0;border-radius:10px;padding:11px;cursor:pointer}
 .lock-card button:hover{background:var(--red)}
 .lock-err{color:var(--bad);font-weight:600;font-size:13.5px;min-height:20px;margin-top:10px}
+.weekpick{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.weekpick label{font-family:var(--head);font-size:16px;letter-spacing:.5px;color:var(--navy);text-transform:uppercase}
+.weeksel{font-family:var(--head);font-size:18px;letter-spacing:.5px;color:#fff;background:var(--navy);border:0;border-radius:10px;padding:8px 14px;cursor:pointer;max-width:100%}
+.weeksel option{background:#fff;color:var(--ink);font-family:var(--body);font-size:15px}
 /* las vegas */
 .ua{border-top:1px solid var(--line);padding:10px 0}
 .ua-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
@@ -248,7 +252,7 @@ table.st td.tm img{width:26px;height:26px}
 
 <main class="wrap">
   <section class="tab on" id="tab-pred">
-    <div class="weeks" id="weeks"></div>
+    <div class="weekpick"><label for="weekSel">Jornada</label><select id="weekSel" class="weeksel"></select></div>
     <div class="weekhead">
       <div><h2 id="wtitle"></h2><div class="meta" id="wmeta"></div></div>
       <div class="tools">
