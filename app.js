@@ -181,6 +181,9 @@ function gameCard({g, v}){
     ${res}
     <div class="info">
       ${(u => u && u.sc >= 35 ? `<div class="adj" style="color:#b71c1c">🚨 Alerta de sorpresa ${u.sc}/100: ${esc(u.dogN)} (Vegas le da ${pc(u.pv)}, nuestros modelos ${pc(u.pm)}). Detalles en la pestaña Las Vegas.</div>` : '')(upsetInfo(g))}
+      ${!g.final ? [A, H].map(ab => { const L = D.teams[ab]?.luck?.last; if (!L) return '';
+          const tx = {luck_win: `ganó con suerte su último partido vs ${L.vs} (${L.score}); fue superado en yardas`, unlucky_loss: `perdió su último partido jugando mejor vs ${L.vs} (${L.score})`, blown_out: `fue dominado en su último partido por ${L.vs} (${L.score})`}[L.type];
+          return tx ? `<div class="adj" style="color:var(--navy)">📊 ${ab} ${tx}.</div>` : ''; }).join('') : ''}
       ${notes.map(n => `<div class="adj">${esc(n)}</div>`).join('')}
       ${v.manual ? `<div class="man">✎ Tu ajuste: ${A} ${v.man.a>0?'+':''}${v.man.a||0}, ${H} ${v.man.h>0?'+':''}${v.man.h||0}</div>` : ''}
       ${wx ? `<div>${wx}</div>` : ''}
@@ -813,3 +816,114 @@ function pubMoneyCard(){
 }
 
 renderVegas();
+
+// ---------- Analisis: por que paso lo que paso y lecciones para la proxima jornada ----------
+const anSel = $('#anWeek');
+const anWeeks = D.weeks.filter(w => w.games.some(g => g.analysis));
+let anKey = (anWeeks.filter(w => w.games.every(g => g.final)).pop() || anWeeks[anWeeks.length - 1] || {}).key;
+anSel.innerHTML = anWeeks.map(w => `<option value="${w.key}">${esc(w.label)}</option>`).join('');
+if (anKey) anSel.value = anKey;
+anSel.onchange = () => { anKey = +anSel.value; renderAnalysis(); };
+
+const VK = {earned: ['Merecida', 's-exp'], luck: ['Con suerte', 's-boom'], coin: ['Moneda al aire', 's-mild'], even: ['Pareja', 's-sure'], tie: ['Empate', 's-sure']};
+const tName = ab => D.teams[ab]?.short || ab;
+function mmss(s){ return s == null ? '—' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function frac(x){ return x && x[1] ? `${x[0]}/${x[1]}` : '—'; }
+
+// por que fallo (o acerto) nuestro pick
+function missReason(g){
+  const an = g.analysis, v = view(g);
+  if (!an || !v.result || v.result.tie) return null;
+  if (v.result.correct) return {ok: true};
+  const our = v.pick;
+  if (an.vk === 'luck') return {ok: false, cat: 'suerte', t: `${tName(our)} jugó mejor (más yardas) pero perdió: ${an.verdict.split(':')[1] || ''}`};
+  if (an.vk === 'coin' || an.vk === 'even') return {ok: false, cat: 'moneda', t: `Partido parejo que se fue para el otro lado (${an.verdict.split(':')[0]}).`};
+  return {ok: false, cat: 'error', t: `${tName(an.win)} fue claramente mejor: ${an.factors[0] ? an.factors[0].t : an.verdict}.`};
+}
+
+function lessonsHtml(){
+  const cur = D.weeks.find(w => w.key === D.current_key);
+  const nextOf = ab => { const g = cur && cur.games.find(x => !x.final && (x.home.abbr === ab || x.away.abbr === ab));
+    return g ? `Próximo: ${g.home.abbr === ab ? 'vs' : '@'} ${tName(g.home.abbr === ab ? g.away.abbr : g.home.abbr)}` : ''; };
+  const items = [];
+  Object.entries(D.teams).forEach(([ab, t]) => {
+    const L = t.luck; if (!L) return;
+    if (L.last) {
+      const nx = nextOf(ab);
+      if (L.last.type === 'luck_win') items.push({o: 1, h: `⚠️ <b>${tName(ab)}</b> ganó con suerte vs ${tName(L.last.vs)} (${L.last.score}): fue superado en yardas. Ojo, el público y Vegas suelen sobrevalorar al que viene de ganar. ${nx}`});
+      if (L.last.type === 'unlucky_loss') items.push({o: 0, h: `💡 <b>${tName(ab)}</b> perdió jugando mejor vs ${tName(L.last.vs)} (${L.last.score}). Puede estar subvalorado esta semana. ${nx}`});
+      if (L.last.type === 'blown_out') items.push({o: 2, h: `📉 <b>${tName(ab)}</b> fue dominado de verdad por ${tName(L.last.vs)} (${L.last.score}): su derrota no fue mala suerte. ${nx}`});
+    }
+    if (L.luck_wins >= 1.5) items.push({o: 3, h: `🍀 <b>${tName(ab)}</b> tiene ${L.wins} victorias pero por puntos merecía ~${L.exp_wins} (cerrados ${L.close}). Su récord es mejor que su juego.`});
+    if (L.luck_wins <= -1.5) items.push({o: 4, h: `🔧 <b>${tName(ab)}</b> tiene ${L.wins} victorias pero merecía ~${L.exp_wins} (cerrados ${L.close}). Juega mejor de lo que dice su récord.`});
+  });
+  items.sort((a, b) => a.o - b.o);
+  return `<div class="card"><h3>📚 Lecciones para la próxima jornada</h3>
+    ${items.length ? `<ul style="padding-left:20px;line-height:1.7;font-size:14px;margin:0">${items.map(i => `<li>${i.h}</li>`).join('')}</ul>` : '<p class="hint">Sin señales destacadas.</p>'}
+    <p class="hint">Cómo se usa: las victorias con suerte (turnovers, zona roja, partidos cerrados) casi no se repiten, mientras que dominar en yardas sí. Por eso el modelo SRS ya mezcla 50% marcador y 50% yardas, que en las temporadas 2024–2025 predijo mejor. Estas notas también aparecen en las tarjetas de Predicciones.</p></div>`;
+}
+
+function anCard(g){
+  const an = g.analysis; if (!an) return '';
+  const H = g.home.abbr, A = g.away.abbr, S = an.stats, [vt, vc] = VK[an.vk] || ['', 's-sure'];
+  const mr = missReason(g), mres = marketRes(g);
+  const row = (lab, f, better) => { const a = f(S[A]), h = f(S[H]);
+    return `<tr><td>${lab}</td><td>${a}</td><td>${h}</td></tr>`; };
+  const pctx = x => x && x[1] ? Math.round(100 * x[0] / x[1]) + '%' : '—';
+  return `<article class="game">
+    <div class="ghead"><span><b>${tName(A)} ${g.as} @ ${tName(H)} ${g.hs}</b></span><span class="sbadge ${vc}">${vt}</span></div>
+    <div class="vg-ins" style="margin-top:6px"><b>${esc(an.verdict)}</b></div>
+    <table class="mt" style="margin:6px 14px 0;width:calc(100% - 28px)">
+      <tr><th></th><th>${A}</th><th>${H}</th></tr>
+      ${row('Yardas', x => x.yds ?? '—')}${row('Yardas por jugada', x => x.ypp ?? '—')}${row('Turnovers (perdidos)', x => x.to ?? '—')}
+      ${row('3ª oportunidad', x => `${frac(x.third)} (${pctx(x.third)})`)}${row('Zona roja (TD)', x => frac(x.red))}
+      ${row('Castigos (yds)', x => x.pen ? x.pen[1] : '—')}${row('Capturas recibidas', x => x.sacked ? x.sacked[0] : '—')}${row('Posesión', x => mmss(x.top))}
+    </table>
+    ${an.factors.length ? `<div class="vg-ins"><b>Factores clave:</b>${an.factors.map(f => `<div>• ${esc(f.t)}</div>`).join('')}</div>` : ''}
+    <div class="vg-res">${mr ? (mr.ok ? `✓ Nuestro pick (${tName(view(g).pick)}) acertó.` : `✗ Fallamos con ${tName(view(g).pick)}: ${esc(mr.t)}`) : ''}
+      ${mres ? `<br>Vegas le daba ${Math.round(mres.pw * 100)}% al ganador · <span class="sbadge ${mres.sur.cls}" style="font-size:11px">${mres.sur.t}</span>` : ''}</div>
+  </article>`;
+}
+
+function luckTable(){
+  const rows = Object.entries(D.teams).filter(([, t]) => t.luck).sort((a, b) => b[1].luck.luck_wins - a[1].luck.luck_wins);
+  return `<div class="card"><h3>🍀 ¿Quién ha tenido suerte en la temporada?</h3>
+    <div class="tscroll"><table class="st"><tr><th>Equipo</th><th>Récord</th><th>Victorias merecidas</th><th>Suerte (+/−)</th><th>Cerrados (≤7)</th><th>Dif. balones</th><th>Margen real/PJ</th><th>Margen por yardas/PJ</th></tr>
+    ${rows.map(([ab, t]) => { const L = t.luck;
+      return `<tr><td class="tm"><img src="${esc(t.logo)}" alt="">${esc(t.name)}</td><td>${esc(t.record)}</td><td>${fx(L.exp_wins)}</td>
+        <td class="${L.luck_wins >= 1 ? 'lo' : L.luck_wins <= -1 ? 'hi' : ''}">${L.luck_wins > 0 ? '+' : ''}${fx(L.luck_wins)}</td><td>${L.close}</td>
+        <td>${L.to_margin > 0 ? '+' : ''}${L.to_margin ?? '—'}</td><td>${fx(L.real_pg)}</td><td>${fx(L.perf_pg)}</td></tr>`; }).join('')}
+    </table></div>
+    <p class="hint"><b>Suerte</b> = victorias reales − victorias que merecía por puntos anotados y permitidos (Pitagórico). Rojo = récord inflado (puede bajar), verde = récord por debajo de su nivel (puede subir). La diferencia de balones y los partidos cerrados tienden a emparejarse con el tiempo.</p></div>`;
+}
+
+function renderAnalysis(){
+  const w = D.weeks.find(x => x.key === anKey);
+  if (!w) { $('#anBody').innerHTML = '<div class="empty">Todavía no hay partidos terminados.</div>'; return; }
+  const gs = w.games.filter(g => g.analysis && g.hs !== g.as);
+  const toWin = gs.filter(g => { const S = g.analysis.stats, W = S[g.analysis.win], L = S[g.analysis.lose]; return (W.to ?? 0) < (L.to ?? 0); }).length;
+  const toDec = gs.filter(g => { const S = g.analysis.stats; return (S[g.analysis.win].to ?? 0) !== (S[g.analysis.lose].to ?? 0); }).length;
+  const ydWin = gs.filter(g => { const S = g.analysis.stats; return (S[g.analysis.win].yds ?? 0) > (S[g.analysis.lose].yds ?? 0); }).length;
+  const luckN = gs.filter(g => g.analysis.vk === 'luck').length, coinN = gs.filter(g => g.analysis.vk === 'coin').length;
+  const ms = gs.map(missReason).filter(Boolean), ok = ms.filter(m => m.ok).length;
+  const cat = c => ms.filter(m => m.cat === c).length;
+  const tile = (v, l, r) => `<div class="tile ${r ? 'r' : ''}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  $('#anBody').innerHTML = `
+    <div class="tiles">
+      ${tile(`${ok}/${ms.length}`, 'Aciertos de nuestro modelo', true)}
+      ${tile(`${toWin}/${toDec}`, 'Ganó el que cometió menos turnovers')}
+      ${tile(`${ydWin}/${gs.length}`, 'Ganó el que tuvo más yardas')}
+      ${tile(luckN, 'Victorias con suerte (superado en yardas)')}
+      ${tile(coinN, 'Partidos de moneda al aire')}
+    </div>
+    <div class="card"><h3>¿Por qué fallamos?</h3>
+      <p style="margin:0 0 8px">De ${ms.length - ok} fallos: <b>${cat('suerte')}</b> por mala suerte (nuestro equipo jugó mejor), <b>${cat('moneda')}</b> en partidos parejos y <b>${cat('error')}</b> en que el rival fue claramente mejor (ahí el modelo sí se equivocó).</p>
+      <ul style="padding-left:20px;line-height:1.6;font-size:13.5px;margin:0">${gs.map(g => ({g, m: missReason(g)})).filter(x => x.m && !x.m.ok)
+        .map(({g, m}) => `<li><b>${tName(g.away.abbr)} ${g.as} @ ${tName(g.home.abbr)} ${g.hs}</b>: ${esc(m.t)}</li>`).join('') || '<li>¡Ninguno!</li>'}</ul>
+      <p class="hint">Fallar por mala suerte o en partidos parejos es normal y no indica que el modelo esté mal. Si muchos fallos son "el rival fue claramente mejor", conviene revisar ajustes (lesiones, QB, etc.).</p></div>
+    ${lessonsHtml()}
+    <h3 style="font-family:var(--head);color:var(--navy);margin:20px 0 10px">Partido por partido</h3>
+    <div class="grid">${[...w.games].filter(g => g.analysis).sort((a, b) => new Date(a.date) - new Date(b.date)).map(anCard).join('')}</div>
+    <div style="margin-top:18px">${luckTable()}</div>`;
+}
+renderAnalysis();

@@ -50,6 +50,8 @@ DIVISIONS = {
 TEAM_DIV = {t: d for d, ts in DIVISIONS.items() for t in ts.split()}
 EASTERN = set("BUF MIA NE NYJ BAL CIN CLE PIT IND JAX TB ATL CAR DET NYG PHI WSH".split())
 PACIFIC = set("SEA SF LAR LAC LV ARI".split())
+YARDS_BLEND = 0.5        # SRS: 50% marcador real + 50% puntos que "merecian" sus yardas (backtest 2024-26: menor error)
+TO_VALUE = 4.0           # puntos que vale un turnover (para el analisis de la jornada)
 VEGAS_WEIGHT = 0.25      # peso del moneyline de Las Vegas dentro del consenso (si hay momio)
 AN_API = "https://api.actionnetwork.com/web/v2/scoreboard/nfl"   # momios y % de apuestas del publico
 AN_ABBR = {"JAC": "JAX", "LA": "LAR", "WAS": "WSH"}
@@ -192,7 +194,8 @@ def fetch_boxscores(season, games):
     """Jugadas ofensivas, yardas y perdidas de balon de cada partido terminado."""
     path = os.path.join(CACHE_DIR, f"box_{season}.json")
     box = load_json(path, {})
-    need = [g for g in games if g["final"] and g["id"] not in box]
+    # "third" marca las entradas con estadisticas completas (las viejas solo tenian jugadas/yardas/balones)
+    need = [g for g in games if g["final"] and ("third" not in next(iter(box.get(g["id"], {"x": {}}).values())))]
     if not need:
         return box
 
@@ -207,9 +210,27 @@ def fetch_boxscores(season, games):
             st = {}
             for s in t.get("statistics", []):
                 st.setdefault(s["name"], s.get("displayValue"))
+            def pair(v):   # "7-13" -> [7, 13]
+                try:
+                    x, y = str(v).split("-")[:2]
+                    return [int(x), int(y)]
+                except (ValueError, TypeError):
+                    return None
+
+            def secs(v):   # "39:21" -> segundos
+                try:
+                    mm, ss = str(v).split(":")
+                    return int(mm) * 60 + int(ss)
+                except (ValueError, TypeError):
+                    return None
             out[t["team"]["abbreviation"]] = {
                 "plays": to_int(st.get("totalOffensivePlays")), "yards": to_int(st.get("totalYards")),
-                "to": to_int(st.get("turnovers")),
+                "to": to_int(st.get("turnovers")), "third": pair(st.get("thirdDownEff")),
+                "fourth": pair(st.get("fourthDownEff")), "red": pair(st.get("redZoneAttempts")),
+                "pen": pair(st.get("totalPenaltiesYards")), "sacked": pair(st.get("sacksYardsLost")),
+                "top": secs(st.get("possessionTime")), "dtd": to_int(st.get("defensiveTouchdowns")),
+                "pass": to_int(st.get("netPassingYards")), "rush": to_int(st.get("rushingYards")),
+                "first": to_int(st.get("firstDowns")),
             }
         return g["id"], out if len(out) == 2 else None
 
@@ -583,16 +604,34 @@ def neutral_team(league):
             "plays_pg": league["plays"], "opp_plays_pg": league["plays"], "pyth": 0.5}
 
 
-def srs_ratings(games, lg_ppg):
-    """Rating ofensivo/defensivo ajustado por la calidad de los rivales (Simple Rating System)."""
+def league_ppy(games, box):
+    """Puntos por yarda de la liga (para convertir yardas en 'puntos merecidos')."""
+    pts = yds = 0
+    for g in games:
+        bx = box.get(g["id"]) if box else None
+        if g["final"] and bx and all((t.get("yards") or 0) > 0 for t in bx.values()):
+            pts += g["hs"] + g["as"]
+            yds += sum(t["yards"] for t in bx.values())
+    return pts / yds if yds else None
+
+
+def srs_ratings(games, lg_ppg, box=None):
+    """Rating ofensivo/defensivo ajustado por la calidad de los rivales (Simple Rating System).
+    Con box: cada marcador se mezcla con los puntos que sugieren sus yardas (quita parte de la suerte)."""
     played = defaultdict(list)
     last_key = max((g["key"] for g in games if g["final"]), default=0)
+    ppy = league_ppy(games, box) if box and YARDS_BLEND else None
     for g in games:
         if g["final"]:
             h, a = g["home"]["abbr"], g["away"]["abbr"]
             wt = FORM_DECAY ** (last_key - g["key"])
-            played[h].append((a, g["hs"], g["as"], wt))
-            played[a].append((h, g["as"], g["hs"], wt))
+            ph, pa = g["hs"], g["as"]
+            bx = box.get(g["id"], {}) if ppy else {}
+            if bx.get(h, {}).get("yards") and bx.get(a, {}).get("yards"):
+                ph = (1 - YARDS_BLEND) * ph + YARDS_BLEND * bx[h]["yards"] * ppy
+                pa = (1 - YARDS_BLEND) * pa + YARDS_BLEND * bx[a]["yards"] * ppy
+            played[h].append((a, ph, pa, wt))
+            played[a].append((h, pa, ph, wt))
     O = {t: 0.0 for t in played}
     D = {t: 0.0 for t in played}
     for _ in range(200):
@@ -635,6 +674,105 @@ def run_elo(all_games, cur_season):
     if last != cur_season:   # aun no empieza la temporada: aplicar regresion
         final = {t: v * (1 - ELO_REVERT) + 1505 * ELO_REVERT for t, v in final.items()}
     return snaps, final
+
+
+# --------------------------------------------------------------- analisis ---
+
+def analyze_game(g, box, ppy):
+    """Por que paso lo que paso: factores del partido y si la victoria fue merecida o con suerte."""
+    if not g["final"]:
+        return None
+    h, a = g["home"]["abbr"], g["away"]["abbr"]
+    bx = box.get(g["id"], {})
+    bh, ba = bx.get(h), bx.get(a)
+    if not bh or not ba or not bh.get("yards"):
+        return None
+    ppy = ppy or 0.07
+    real = g["hs"] - g["as"]
+    if real == 0:
+        win, lose, W, L = h, a, bh, ba
+    else:
+        win, lose, W, L = (h, a, bh, ba) if real > 0 else (a, h, ba, bh)
+    margin = abs(real)
+    yd = (W["yards"] or 0) - (L["yards"] or 0)                  # yardas de ventaja del ganador
+    to = (L.get("to") or 0) - (W.get("to") or 0)                 # balones de ventaja del ganador
+    pct = lambda x: round(100 * x[0] / x[1]) if x and x[1] else None
+    factors = []
+    if abs(to) >= 1:
+        factors.append({"k": "to", "pts": round(TO_VALUE * to, 1),
+                        "t": f"Turnovers: {win if to > 0 else lose} ganó la batalla de balones {max(W.get('to') or 0, L.get('to') or 0)}-{min(W.get('to') or 0, L.get('to') or 0)} (~{abs(round(TO_VALUE * to))} pts)"})
+    if abs(yd) >= 40:
+        factors.append({"k": "yds", "pts": round(yd * ppy, 1),
+                        "t": f"Yardas: {win if yd > 0 else lose} generó {abs(yd)} yardas más ({max(W['yards'], L['yards'])} vs {min(W['yards'], L['yards'])}, ~{abs(round(yd * ppy))} pts)"})
+    rw, rl = W.get("red"), L.get("red")
+    if rw and rl and rw[1] and rl[1] and abs((pct(rw) or 0) - (pct(rl) or 0)) >= 30:
+        better = win if pct(rw) > pct(rl) else lose
+        factors.append({"k": "red", "pts": None,
+                        "t": f"Zona roja: {win} {rw[0]}/{rw[1]} vs {lose} {rl[0]}/{rl[1]} (anotación de TD): {better} fue mucho más efectivo"})
+    tw, tl = W.get("third"), L.get("third")
+    if tw and tl and tw[1] >= 6 and tl[1] >= 6 and abs((pct(tw) or 0) - (pct(tl) or 0)) >= 20:
+        factors.append({"k": "third", "pts": None,
+                        "t": f"Terceras oportunidades: {win} {pct(tw)}% vs {lose} {pct(tl)}%"})
+    for team, X in ((win, W), (lose, L)):
+        if (X.get("dtd") or 0) > 0:
+            factors.append({"k": "dtd", "pts": 7 * X["dtd"], "t": f"Touchdown defensivo de {team}"})
+        if X.get("sacked") and X["sacked"][0] >= 5:
+            factors.append({"k": "sack", "pts": None, "t": f"{team} recibió {X['sacked'][0]} capturas (sacks) a su QB"})
+    pw, pl = W.get("pen"), L.get("pen")
+    if pw and pl and abs(pw[1] - pl[1]) >= 45:
+        worse = win if pw[1] > pl[1] else lose
+        factors.append({"k": "pen", "pts": None, "t": f"Castigos: {worse} tuvo {max(pw[1], pl[1])} yardas de castigos vs {min(pw[1], pl[1])}"})
+    # veredicto: lo 'merecido' segun yardas contra lo que dio el marcador
+    deserved = yd * ppy                                           # margen que sugieren las yardas (a favor del ganador)
+    if real == 0:
+        verdict, vk = "Empate", "tie"
+    elif deserved <= -3:
+        why = "los turnovers" if to >= 2 else "la zona roja y jugadas clave"
+        verdict, vk = f"Victoria con suerte: {win} fue superado en yardas y ganó gracias a {why}", "luck"
+    elif deserved >= 4 or (yd >= 40 and to >= 0):
+        verdict, vk = f"Victoria merecida: {win} dominó el juego", "earned"
+    elif margin <= 3:
+        verdict, vk = "Moneda al aire: parejo en todo y se decidió por 3 puntos o menos", "coin"
+    else:
+        verdict, vk = "Partido parejo; lo definieron detalles", "even"
+    stat = lambda X: {"yds": X.get("yards"), "ypp": round(X["yards"] / X["plays"], 1) if X.get("plays") else None,
+                      "to": X.get("to"), "third": X.get("third"), "red": X.get("red"), "pen": X.get("pen"),
+                      "top": X.get("top"), "sacked": X.get("sacked"), "first": X.get("first")}
+    return {"win": win, "lose": lose, "verdict": verdict, "vk": vk, "deserved": round(deserved, 1),
+            "factors": factors, "stats": {h: stat(bh), a: stat(ba)}}
+
+
+def team_luck(games, box, ts, ppy):
+    """Suerte acumulada de cada equipo: victorias reales vs esperadas, balones y marcador vs rendimiento."""
+    out = defaultdict(lambda: {"close_w": 0, "close_l": 0, "perf": 0.0, "real": 0.0, "n": 0, "last": None})
+    for g in sorted((g for g in games if g["final"]), key=lambda g: g["date"]):
+        an = g.get("analysis")
+        h, a = g["home"]["abbr"], g["away"]["abbr"]
+        bx = box.get(g["id"], {})
+        for me, op, pf, pa in ((h, a, g["hs"], g["as"]), (a, h, g["as"], g["hs"])):
+            r = out[me]
+            if abs(pf - pa) <= 7 and pf != pa:
+                r["close_w" if pf > pa else "close_l"] += 1
+            if bx.get(me, {}).get("yards") and bx.get(op, {}).get("yards") and ppy:
+                r["perf"] += (bx[me]["yards"] - bx[op]["yards"]) * ppy
+                r["real"] += pf - pa
+                r["n"] += 1
+            if an and an["vk"] == "luck":
+                r["last"] = {"key": g["key"], "type": "luck_win" if an["win"] == me else "unlucky_loss",
+                             "vs": op, "score": f"{max(pf, pa)}-{min(pf, pa)}"}
+            elif an and an["vk"] == "earned" and pf < pa and an["deserved"] >= 7:
+                r["last"] = {"key": g["key"], "type": "blown_out", "vs": op, "score": f"{pa}-{pf}"}
+            else:
+                r["last"] = r["last"] if r["last"] and r["last"]["key"] == g["key"] else None
+    res = {}
+    for t, r in out.items():
+        T = ts.get(t, {})
+        exp_w = (T.get("pyth") or 0.5) * (T.get("g") or 0)
+        res[t] = {"wins": T.get("w", 0), "exp_wins": round(exp_w, 1), "luck_wins": round(T.get("w", 0) - exp_w, 1),
+                  "close": f"{r['close_w']}-{r['close_l']}", "to_margin": T.get("to_margin"),
+                  "perf_pg": round(r["perf"] / r["n"], 1) if r["n"] else None,
+                  "real_pg": round(r["real"] / r["n"], 1) if r["n"] else None, "last": r["last"]}
+    return res
 
 
 # ------------------------------------------------------------- prediccion ---
@@ -843,10 +981,11 @@ def main():
             teams_meta.setdefault(t["abbr"], {k: t[k] for k in ("name", "short", "color", "alt", "logo")})
 
     weeks_out, all_results = [], []
+    ppy_all = league_ppy(games, box)
     for k in [k for k in keys if k <= current]:
         prev = [g for g in games if g["key"] < k and g["final"]]
         ts, league = team_stats(prev, box)
-        O, D = srs_ratings(prev, league["ppg"])
+        O, D = srs_ratings(prev, league["ppg"], box)
         elo = snaps.get(k, elo_now)
         weeks_played = len({g["key"] for g in prev})
         wk_games, results = [], []
@@ -856,6 +995,7 @@ def main():
                         market.get(g["id"]))
             r = grade(g, p)
             results.append(r)
+            g["analysis"] = analyze_game(g, box, ppy_all)
             wk_games.append({**g, "pred": p, "result": r, "extra": ex, "market": market.get(g["id"])})
         if wk_games[0]["stype"] == 2:
             playing = {t for g in wk_games for t in (g["home"]["abbr"], g["away"]["abbr"])}
@@ -873,13 +1013,17 @@ def main():
 
     # estadisticas actuales de cada equipo (todo lo jugado)
     ts_now, league_now = team_stats([g for g in games if g["final"]], box)
-    O, D = srs_ratings([g for g in games if g["final"]], league_now["ppg"])
+    O, D = srs_ratings([g for g in games if g["final"]], league_now["ppg"], box)
     teams_out = {}
     for t, meta in teams_meta.items():
         s = ts_now.get(t, neutral_team(league_now))
         teams_out[t] = {**meta, **{kk: (round(v, 4) if isinstance(v, float) else v) for kk, v in s.items()},
                         "elo": round(elo_now.get(t, 1500)), "srs_off": round(O.get(t, 0), 2),
                         "srs_def": round(D.get(t, 0), 2), "srs": round(O.get(t, 0) - D.get(t, 0), 2)}
+
+    luck = team_luck(games, box, ts_now, ppy_all)
+    for t in teams_out:
+        teams_out[t]["luck"] = luck.get(t)
 
     by_level = {}
     for lvl in ("Alta", "Media", "Baja"):

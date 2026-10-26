@@ -238,6 +238,7 @@ table.st td.tm img{width:26px;height:26px}
       <button data-tab="pred" class="on">Predicciones</button>
       <button data-tab="picks">Mis Picks</button>
       <button data-tab="vegas">Las Vegas</button>
+      <button data-tab="analisis">Análisis</button>
       <button data-tab="teams">Equipos</button>
       <button data-tab="acc">Precisión</button>
       <button data-tab="how">Cómo funciona</button>
@@ -311,6 +312,12 @@ table.st td.tm img{width:26px;height:26px}
     </div>
   </section>
 
+  <section class="tab" id="tab-analisis">
+    <div class="pk-tools"><label>Jornada: <select id="anWeek"></select></label>
+      <span class="hint" style="margin:0">Qué pasó, por qué, y qué aprender para la siguiente jornada.</span></div>
+    <div id="anBody"></div>
+  </section>
+
   <section class="tab" id="tab-teams">
     <div class="card">
       <h3>Estadísticas de la temporada</h3>
@@ -333,7 +340,7 @@ Puntos esperados del equipo A = ( Ofensiva de A + Defensiva de B ) / 2</div>
     </div>
     <div class="card">
       <h3>2. SRS – ajustado por calendario</h3>
-      <p>El <i>Simple Rating System</i> corrige los promedios según la calidad de los rivales: anotar 30 puntos contra la mejor defensiva vale más que contra la peor. Cada equipo recibe un rating ofensivo y uno defensivo, y el marcador esperado es <code>promedio de liga + ofensiva propia + debilidad defensiva del rival</code>.</p>
+      <p>El <i>Simple Rating System</i> corrige los promedios según la calidad de los rivales: anotar 30 puntos contra la mejor defensiva vale más que contra la peor. Cada equipo recibe un rating ofensivo y uno defensivo, y el marcador esperado es <code>promedio de liga + ofensiva propia + debilidad defensiva del rival</code>. Además, cada marcador se mezcla 50/50 con los puntos que "merecían" las yardas de cada equipo: así una victoria por turnovers o por suerte en la zona roja cuenta menos que dominar el juego. En las temporadas 2024 y 2025 esto redujo el error de predicción.</p>
     </div>
     <div class="card">
       <h3>3. Elo</h3>
