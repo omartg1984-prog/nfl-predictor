@@ -41,7 +41,7 @@ function barColors(g){
 }
 
 // ---------- predictions ----------
-let curKey = Number(store.get('week')) || D.current_key;
+let curKey = D.current_key;   // siempre abre en la jornada en curso
 if (!D.weeks.some(w => w.key === curKey)) curKey = D.current_key;
 let onlyHigh = false;
 let useAuto = store.get('autoAdj') !== '0';
@@ -113,7 +113,7 @@ function renderWeeks(){
   const sel = $('#weekSel');
   sel.innerHTML = D.weeks.map(w => `<option value="${w.key}">${esc(w.label)}${weekTag(w)}</option>`).join('');
   sel.value = curKey;
-  sel.onchange = () => { curKey = pkKey = +sel.value; store.set('week', curKey); renderWeek(); };
+  sel.onchange = () => { curKey = pkKey = +sel.value; renderWeek(); };
 }
 
 const ST_ES = {Out:'Fuera', Doubtful:'Dudoso', Questionable:'En duda'};
