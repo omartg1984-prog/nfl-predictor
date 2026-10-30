@@ -1,5 +1,20 @@
 // Carga la app. Si los datos vienen cifrados (window.NFL_ENC), pide la contraseña y los descifra en el navegador.
 (function () {
+  // app instalable (PWA): service worker + boton "Instalar app"
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    window.__installEvt = e;
+    const b = document.getElementById('installBtn');
+    if (b) b.hidden = false;
+  });
+  window.addEventListener('appinstalled', () => {
+    const b = document.getElementById('installBtn');
+    if (b) b.hidden = true;
+  });
+
   // los datos se piden con ?t= para no recibir una version vieja guardada en cache
   const ds = document.createElement('script');
   ds.src = 'data/nfl_data.js?t=' + Date.now();

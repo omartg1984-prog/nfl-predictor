@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NFL Predictor</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#013369">
+<link rel="icon" type="image/png" href="icons/favicon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NFL Predictor">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -236,7 +244,7 @@ table.st td.tm img{width:26px;height:26px}
         <h1>NFL <span>PREDICTOR</span> <span id="season" style="color:#fff"></span></h1>
         <div class="sub">Predicciones por jornada con estadísticas actualizadas de la liga</div>
       </div>
-      <div class="upd"><div id="upd"></div><button class="updbtn" id="updBtn" hidden>🔄 Actualizar</button></div>
+      <div class="upd"><div id="upd"></div><button class="updbtn" id="updBtn" hidden>🔄 Actualizar</button> <button class="updbtn" id="installBtn" hidden>📲 Instalar app</button></div>
     </div>
     <nav>
       <button data-tab="pred" class="on">Predicciones</button>
@@ -380,6 +388,14 @@ Puntos esperados del equipo A = ( Ofensiva de A + Defensiva de B ) / 2</div>
       </ul>
       <p><b>Manual:</b> en cada partido abre "Ver modelos, lesiones y ajustes" y suma o resta puntos a cualquier equipo. Por ejemplo: QB suplente confirmado −5, receptor o pass rusher estrella fuera −1 a −2, varios titulares de la línea ofensiva fuera −1.5, viaje corto con descanso extra +1. Tus ajustes se guardan en este navegador y se aplican a todos los modelos.</p>
       <p class="hint">Limitaciones: el reporte de lesiones de inicio de semana es preliminar. El reporte oficial sale el viernes y la lista de inactivos 90 minutos antes del partido, así que conviene actualizar el viernes en la noche y otra vez el domingo antes de los partidos. El depth chart de ESPN a veces tarda unas horas en reflejar un cambio de titular. La línea de Las Vegas es buena referencia porque incorpora toda esta información.</p>
+    </div>
+    <div class="card">
+      <h3>Instalar en el celular</h3>
+      <ul>
+        <li><b>Android (Chrome):</b> abre la página y toca <b>📲 Instalar app</b> arriba a la derecha, o en el menú ⋮ de Chrome elige <b>Instalar aplicación</b> o <b>Agregar a pantalla principal</b>.</li>
+        <li><b>iPhone (Safari):</b> toca el botón <b>Compartir</b> (cuadro con flecha) y luego <b>Agregar a inicio</b>.</li>
+        <li>Queda con su ícono y se abre a pantalla completa como cualquier app. Se actualiza sola porque usa la misma página, y sin internet abre con los últimos datos descargados.</li>
+      </ul>
     </div>
     <div class="card">
       <h3>Actualización</h3>

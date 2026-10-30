@@ -932,3 +932,13 @@ function renderAnalysis(){
     <div style="margin-top:18px">${luckTable()}</div>`;
 }
 renderAnalysis();
+
+// ---------- boton Instalar app (Android/Chrome) ----------
+const instBtn = $('#installBtn');
+if (window.__installEvt) instBtn.hidden = false;
+instBtn.onclick = async () => {
+  const e = window.__installEvt; if (!e) return;
+  e.prompt();
+  await e.userChoice.catch(() => {});
+  window.__installEvt = null; instBtn.hidden = true;
+};
