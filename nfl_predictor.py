@@ -12,6 +12,8 @@ Uso:  python nfl_predictor.py          (actualiza todo y regenera data/nfl_data.
 """
 import json
 import math
+
+import apuestas
 import os
 import sys
 import time
@@ -314,7 +316,8 @@ def fetch_market(season, games):
     Se guarda por partido; despues de que empieza el partido ya no se toca (queda el momio de cierre)."""
     path = os.path.join(CACHE_DIR, f"market_{season}.json")
     market = load_json(path, {})
-    weeks = sorted({g["week"] for g in games if g["stype"] == 2 and (g["id"] not in market or g["state"] == "pre")})
+    stale = lambda g: g["id"] not in market or g["state"] == "pre" or "tot" not in market[g["id"]]
+    weeks = sorted({g["week"] for g in games if g["stype"] == 2 and stale(g)})
     if not weeks:
         return market
     by_pair = {(g["week"], g["home"]["abbr"], g["away"]["abbr"]): g for g in games if g["stype"] == 2}
@@ -332,7 +335,7 @@ def fetch_market(season, games):
             for x in d.get("games", []):
                 T = {t["id"]: AN_ABBR.get(t["abbr"], t["abbr"]) for t in x.get("teams", [])}
                 g = by_pair.get((week, T.get(x.get("home_team_id")), T.get(x.get("away_team_id"))))
-                if not g or (g["id"] in market and g["state"] != "pre"):
+                if not g or not stale(g):
                     continue
                 mk = x.get("markets") or {}
 
@@ -345,12 +348,20 @@ def fetch_market(season, games):
                 def pct(side, kind):
                     return (((cons[side].get("bet_info") or {}).get(kind)) or {}).get("percent")
                 ih, ia = american_prob(cons["home"]["odds"]), american_prob(cons["away"]["odds"])
+                ev15 = (mk.get("15") or {}).get("event") or {}
+                sp = {o.get("side"): o for o in ev15.get("spread") or []}
+                tt = {o.get("side"): o for o in ev15.get("total") or []}
                 market[g["id"]] = {
                     "ml_h": cons["home"]["odds"], "ml_a": cons["away"]["odds"],
                     "open_h": (opn.get("home") or {}).get("odds"), "open_a": (opn.get("away") or {}).get("odds"),
                     "p_h": round(ih / (ih + ia), 4),      # probabilidad sin comision
                     "tickets_h": pct("home", "tickets"), "tickets_a": pct("away", "tickets"),
                     "money_h": pct("home", "money"), "money_a": pct("away", "money"),
+                    # spread (linea del local) y total, para la pestana de apuestas
+                    "sp_h": (sp.get("home") or {}).get("value"), "sp_h_o": (sp.get("home") or {}).get("odds"),
+                    "sp_a_o": (sp.get("away") or {}).get("odds"),
+                    "tot": (tt.get("over") or {}).get("value"), "ov_o": (tt.get("over") or {}).get("odds"),
+                    "un_o": (tt.get("under") or {}).get("odds"),
                 }
     save_json(path, market)
     return market
@@ -1011,6 +1022,15 @@ def main():
             "games": wk_games, "bye": bye, "summary": summarize(results), "league": league,
         })
 
+    # recomendaciones de apuestas (directas, props y parlays) con historial calificado
+    try:
+        bets = apuestas.build(season, games, weeks_out, market, extras, current,
+                              {"get_json": get_json, "load_json": load_json, "save_json": save_json,
+                               "log": log, "cache_dir": CACHE_DIR})
+    except Exception as ex:   # que una falla de apuestas no tumbe toda la actualizacion
+        log(f"  aviso: no se pudieron generar apuestas: {ex!r}")
+        bets = None
+
     # estadisticas actuales de cada equipo (todo lo jugado)
     ts_now, league_now = team_stats([g for g in games if g["final"]], box)
     O, D = srs_ratings([g for g in games if g["final"]], league_now["ppg"], box)
@@ -1033,7 +1053,7 @@ def main():
     out = {
         "generated": now.isoformat(timespec="seconds"),
         "season": season, "current_key": current, "teams": teams_out, "weeks": weeks_out,
-        "league": league_now, "season_summary": summarize([r for r, _ in all_results]), "market_stats": mstats, "by_level": by_level,
+        "league": league_now, "season_summary": summarize([r for r, _ in all_results]), "market_stats": mstats, "bets": bets, "by_level": by_level,
         "params": {"hfa": HFA_POINTS, "sigma": SIGMA, "prior_games": PRIOR_GAMES, "weights": BASE_WEIGHTS, "vegas_weight": VEGAS_WEIGHT,
                    "elo_k": ELO_K, "elo_hfa": ELO_HFA, "pyth_exp": PYTH_EXP},
     }

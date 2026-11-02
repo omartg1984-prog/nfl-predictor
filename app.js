@@ -942,3 +942,86 @@ instBtn.onclick = async () => {
   await e.userChoice.catch(() => {});
   window.__installEvt = null; instBtn.hidden = true;
 };
+
+// ---------- Apuestas: directas (spread), props de jugadores, TD y parlays ----------
+const PROP_NAMES = {py: 'yardas por pase', ry: 'yardas por tierra', recy: 'yardas por recepción', rec: 'recepciones', ptd: 'pases de TD'};
+const BT = D.bets;
+const btSel = $('#btWeek');
+const btKeys = BT ? Object.keys(BT.weeks).map(Number).sort((a, b) => a - b) : [];
+let btKey = btKeys.includes(D.current_key) ? D.current_key : btKeys[btKeys.length - 1];
+if (btSel) {
+  btSel.innerHTML = btKeys.map(k => { const w = D.weeks.find(x => x.key === k); return `<option value="${k}">${esc(w ? w.label : 'Semana ' + k)}${w ? weekTag(w) : ''}</option>`; }).join('');
+  if (btKey) btSel.value = btKey;
+  btSel.onchange = () => { btKey = +btSel.value; renderBets(); };
+}
+const RES = {W: ['✓ Ganó', 'ok'], L: ['✗ Perdió', 'no'], P: ['↺ Anulada', 'tie']};
+const resTag = r => r ? `<span class="bt-res ${RES[r][1]}">${RES[r][0]}</span>` : '<span class="bt-res">Pendiente</span>';
+const starTxt = n => '★'.repeat(n) + '☆'.repeat(3 - n);
+function payout(d){ return `$100 → cobras $${Math.round(100 * d)}`; }
+function recordTile(key, label){
+  const s = BT.history[key];
+  if (!s || !s.n) return `<div class="tile"><div class="v">—</div><div class="l">${label}<br>sin datos todavía</div></div>`;
+  const roi = s.roi == null ? '—' : (s.roi > 0 ? '+' : '') + Math.round(s.roi * 100) + '%';
+  return `<div class="tile ${s.roi > 0 ? '' : 'r'}"><div class="v">${s.w}-${s.l}${s.p ? '-' + s.p : ''}</div>
+    <div class="l">${label}<br><b>${s.units > 0 ? '+' : ''}${s.units}</b> unidades · rendimiento <b>${roi}</b></div></div>`;
+}
+function renderBets(){
+  const box = $('#btBody'); if (!box) return;
+  if (!BT || !btKey) { box.innerHTML = '<div class="empty">Todavía no hay recomendaciones.</div>'; return; }
+  const W = BT.weeks[btKey], recs = W.recs;
+  const sp = recs.filter(r => r.kind === 'sp'), props = recs.filter(r => r.kind === 'prop').slice(0, 25);
+  const anyReal = Object.keys(BT.history).some(k => k.startsWith('real|') && BT.history[k].n);
+  box.innerHTML = `
+    <div class="bt-warn">⚠️ <b>Solo para mayores de edad y como referencia.</b> Ninguna apuesta es segura: aun las mejores pierden 4 de cada 10 veces. Apuesta solo lo que estés dispuesto a perder y nunca para recuperar pérdidas.</div>
+    <h3 class="bt-h">Historial de las recomendaciones (1 unidad por apuesta)</h3>
+    <div class="tiles">
+      ${recordTile('sim|sp', 'Spreads · prueba semanas pasadas')}
+      ${recordTile('sim|prop', 'Props jugadores · prueba semanas pasadas')}
+      ${recordTile('sim|parlay', 'Parlays · prueba semanas pasadas')}
+      ${anyReal ? ['real|sp', 'real|prop', 'real|parlay'].map(k => recordTile(k, {sp: 'Spreads', prop: 'Props', parlay: 'Parlays'}[k.split('|')[1]] + ' · REAL (guardadas antes del partido)')).join('') : ''}
+    </div>
+    <p class="hint" style="margin-top:-8px">La "prueba" usa las líneas de cierre de semanas pasadas y las reglas se ajustaron viendo esos mismos datos, así que el rendimiento real probablemente será menor. El historial <b>REAL</b> se va llenando desde hoy con recomendaciones guardadas antes de cada partido.</p>
+
+    <h3 class="bt-h">🏈 Directas de equipos: spread</h3>
+    ${sp.length ? `<div class="grid">${sp.map(r => `<article class="game bt-card">
+        <div class="ghead"><span>${esc(r.game)} · ${fmtDate(new Date(r.date), {weekday: 'short', hour: 'numeric', minute: '2-digit'})}</span><span class="bt-stars">${starTxt(r.stars)}</span></div>
+        <div class="bt-main"><img src="${esc(D.teams[r.pick]?.logo)}" alt=""><div><b>${esc(D.teams[r.pick]?.short || r.pick)} ${r.line > 0 ? '+' : ''}${r.line}</b><small>momio ${fmtML(r.odds)}</small></div></div>
+        <div class="bt-nums"><span>Prob. de cubrir <b>${pc(r.p)}</b></span><span>Casino <b>${pc(implied(r.odds))}</b></span><span>Valor <b>+${Math.round(r.ev * 100)}%</b></span></div>
+        <div class="vg-res">${resTag(r.res)}</div></article>`).join('')}</div>`
+      : '<p class="hint">No hay spreads con valor esta jornada (o todavía no salen las líneas).</p>'}
+
+    <h3 class="bt-h">👤 Props de jugadores (las ${props.length} con más valor)</h3>
+    ${props.length ? `<div class="card" style="padding:8px"><div class="tscroll"><table class="st">
+      <tr><th>Jugador</th><th>Apuesta</th><th>Línea</th><th>Promedio</th><th>Proyección</th><th>Prob.</th><th>Valor</th><th></th><th>Resultado</th></tr>
+      ${props.map(r => `<tr><td class="tm"><img src="${esc(D.teams[r.team]?.logo)}" alt="">${esc(r.player)}</td>
+        <td>${r.side === 'under' ? 'Menos de' : 'Más de'} ${esc(PROP_NAMES[r.pkey] || r.pkey)}</td><td>${r.line}</td><td>${r.avg} <small>(${r.n} PJ)</small></td>
+        <td>${r.proj}</td><td><b>${pc(r.p)}</b></td><td>+${Math.round(r.ev * 100)}%</td><td class="bt-stars">${starTxt(r.stars)}</td><td>${resTag(r.res)}</td></tr>`).join('')}
+    </table></div></div>
+    <p class="hint">Solo "menos de" en recepciones y yardas por tierra: en la prueba, esos unders pegaron ~60% mientras que los "más de" perdían. Momio asumido −110 (ESPN no publica el momio de cada prop; revisa el de tu casa de apuestas).</p>`
+      : '<p class="hint">Todavía no hay props publicados para esta jornada (suelen salir a mitad de semana).</p>'}
+
+    <h3 class="bt-h">🎯 Parlays sugeridos</h3>
+    ${W.parlays.length ? `<div class="grid">${W.parlays.map(pz => `<article class="game bt-card">
+        <div class="ghead"><b>${esc(pz.name)}</b><span>${resTag(pz.res)}</span></div>
+        <ul class="bt-legs">${pz.leg_info.map(l => `<li>${l.res ? (l.res === 'W' ? '✓' : l.res === 'L' ? '✗' : '↺') : '•'} ${esc(l.label)} <small>(${esc(l.game)}, ${fmtML(l.odds)})</small></li>`).join('')}</ul>
+        <div class="bt-nums"><span>Prob. de pegar <b>${pc(pz.p)}</b></span><span>Paga <b>${fmtML(pz.dec >= 2 ? Math.round((pz.dec - 1) * 100) : Math.round(-100 / (pz.dec - 1)))}</b></span><span>${payout(pz.dec)}</span></div>
+        <div class="vg-ins" style="padding-bottom:12px">${pz.ev > 0 ? `Valor esperado <b>+${Math.round(pz.ev * 100)}%</b>.` : `Valor esperado <b>${Math.round(pz.ev * 100)}%</b>: es para quien prefiere más probabilidad de pegar, pero a la larga pierde contra el casino.`}</div>
+      </article>`).join('')}</div>
+      <p class="hint">Cada selección es de un partido distinto. Un parlay solo paga si pegan <b>todas</b>; por eso son mucho más riesgosos que las directas aunque paguen más.</p>`
+      : '<p class="hint">No hay suficientes selecciones con valor para armar parlays.</p>'}
+
+    <h3 class="bt-h">🙌 Candidatos a anotar touchdown (cualquier momento)</h3>
+    ${W.td.length ? `<div class="card" style="padding:8px"><div class="tscroll"><table class="st">
+      <tr><th>Jugador</th><th>Partido</th><th>Prob. de anotar</th><th>TDs en la temporada</th><th>Resultado</th></tr>
+      ${W.td.map(t => `<tr><td class="tm"><img src="${esc(D.teams[t.team]?.logo)}" alt="">${esc(t.player)}</td><td>${esc(t.game)}</td><td><b>${pc(t.p)}</b></td><td>${t.tds} en ${t.n} PJ</td><td>${t.res ? resTag(t.res) : ''}</td></tr>`).join('')}
+    </table></div></div>
+    <p class="hint">Para que una apuesta de TD tenga valor, el momio debe pagar más de lo que indica la probabilidad. Ejemplo: con 40% necesitas momio mayor a +150.</p>` : '<p class="hint">Sin candidatos todavía.</p>'}
+
+    <div class="card how" style="margin-top:18px"><h3>¿Por qué no hay moneyline ni totales?</h3>
+      <ul><li><b>Moneyline:</b> en la prueba, los equipos que nuestro modelo veía con valor ganaron exactamente lo que el momio ya decía (42%). No hay ventaja que aprovechar.</li>
+      <li><b>Totales (más/menos puntos):</b> perdían 32%; el casino los calcula mucho mejor que nuestro modelo.</li>
+      <li><b>Spreads:</b> nuestro modelo sí mostró ventaja (62% de acierto), aunque con pocos casos (50).</li>
+      <li>Si el modelo difiere muchísimo del casino (más de 64%), descartamos la apuesta: casi siempre el casino sabe algo que nosotros no (lesión, cambio de rol).</li></ul></div>`;
+}
+function implied(o){ o = +o; return o > 0 ? 100 / (o + 100) : -o / (-o + 100); }
+renderBets();
