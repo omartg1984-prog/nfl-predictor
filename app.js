@@ -946,14 +946,9 @@ instBtn.onclick = async () => {
 // ---------- Apuestas: directas (spread), props de jugadores, TD y parlays ----------
 const PROP_NAMES = {py: 'yardas por pase', ry: 'yardas por tierra', recy: 'yardas por recepción', rec: 'recepciones', ptd: 'pases de TD'};
 const BT = D.bets;
-const btSel = $('#btWeek');
-const btKeys = BT ? Object.keys(BT.weeks).map(Number).sort((a, b) => a - b) : [];
-let btKey = btKeys.includes(D.current_key) ? D.current_key : btKeys[btKeys.length - 1];
-if (btSel) {
-  btSel.innerHTML = btKeys.map(k => { const w = D.weeks.find(x => x.key === k); return `<option value="${k}">${esc(w ? w.label : 'Semana ' + k)}${w ? weekTag(w) : ''}</option>`; }).join('');
-  if (btKey) btSel.value = btKey;
-  btSel.onchange = () => { btKey = +btSel.value; renderBets(); };
-}
+// solo la proxima jornada (la actual si aun le falta la mitad de sus partidos)
+const btKey = BT && BT.target && BT.weeks[BT.target] ? BT.target : null;
+if (btKey) { const w = D.weeks.find(x => x.key === btKey); $('#btTarget').textContent = 'Próxima jornada: ' + (w ? w.label : 'Semana ' + btKey); }
 const RES = {W: ['✓ Ganó', 'ok'], L: ['✗ Perdió', 'no'], P: ['↺ Anulada', 'tie']};
 const resTag = r => r ? `<span class="bt-res ${RES[r][1]}">${RES[r][0]}</span>` : '<span class="bt-res">Pendiente</span>';
 const starTxt = n => '★'.repeat(n) + '☆'.repeat(3 - n);
@@ -977,8 +972,9 @@ function renderBets(){
     <div class="tiles">
       ${recordTile('sim|sp', 'Spreads · prueba semanas pasadas')}
       ${recordTile('sim|prop', 'Props jugadores · prueba semanas pasadas')}
+      ${recordTile('sim|tot', 'Altas (tendencia) · prueba semanas pasadas')}
       ${recordTile('sim|parlay', 'Parlays · prueba semanas pasadas')}
-      ${anyReal ? ['real|sp', 'real|prop', 'real|parlay'].map(k => recordTile(k, {sp: 'Spreads', prop: 'Props', parlay: 'Parlays'}[k.split('|')[1]] + ' · REAL (guardadas antes del partido)')).join('') : ''}
+      ${anyReal ? ['real|sp', 'real|tot', 'real|prop', 'real|parlay'].map(k => recordTile(k, {sp: 'Spreads', tot: 'Altas', prop: 'Props', parlay: 'Parlays'}[k.split('|')[1]] + ' · REAL (guardadas antes del partido)')).join('') : ''}
     </div>
     <p class="hint" style="margin-top:-8px">La "prueba" usa las líneas de cierre de semanas pasadas y las reglas se ajustaron viendo esos mismos datos, así que el rendimiento real probablemente será menor. El historial <b>REAL</b> se va llenando desde hoy con recomendaciones guardadas antes de cada partido.</p>
 
@@ -989,6 +985,17 @@ function renderBets(){
         <div class="bt-nums"><span>Prob. de cubrir <b>${pc(r.p)}</b></span><span>Casino <b>${pc(implied(r.odds))}</b></span><span>Valor <b>+${Math.round(r.ev * 100)}%</b></span></div>
         <div class="vg-res">${resTag(r.res)}</div></article>`).join('')}</div>`
       : '<p class="hint">No hay spreads con valor esta jornada (o todavía no salen las líneas).</p>'}
+
+    <h3 class="bt-h">📈 Altas y bajas (total de puntos)</h3>
+    ${(W.totals || []).length ? `<div class="card" style="padding:8px"><div class="tscroll"><table class="st">
+      <tr><th>Partido</th><th>Línea</th><th>Alta</th><th>Baja</th><th>Nuestra proyección</th><th>Sugerencia</th><th>Resultado</th></tr>
+      ${W.totals.map(t => `<tr><td>${esc(t.game)} <small style="color:var(--muted)">${fmtDate(new Date(t.date), {weekday: 'short'})}</small></td><td><b>${t.line}</b></td>
+        <td>${fmtML(t.ov_o)}</td><td>${fmtML(t.un_o)}</td><td>${t.proj} <small style="color:var(--muted)">(${t.proj > t.line ? 'alta' : 'baja'})</small></td>
+        <td>${t.ev != null && t.ev > 0 ? `<b>Alta</b> <span class="bt-stars">★☆☆</span>` : '<span style="color:var(--muted)">Sin valor (momio caro)</span>'}</td>
+        <td>${t.res ? resTag(t.res) : ''}</td></tr>`).join('')}
+    </table></div></div>
+    <p class="hint"><b>Cómo leerlo:</b> en 2024–2026 las <b>altas</b> pegaron 53% (340 contra 303), apenas arriba del 52.4% que se necesita para ganarle a la comisión del casino. Es una ventaja mínima, por eso solo una estrella. Nuestra proyección de puntos se muestra como referencia pero <b>no sirve para elegir</b>: en la prueba acertó solo 30–39%. Si el momio de la alta es peor que −115, ya no tiene valor.</p>`
+      : '<p class="hint">Todavía no hay líneas de totales para esta jornada.</p>'}
 
     <h3 class="bt-h">👤 Props de jugadores (las ${props.length} con más valor)</h3>
     ${props.length ? `<div class="card" style="padding:8px"><div class="tscroll"><table class="st">
@@ -1017,9 +1024,9 @@ function renderBets(){
     </table></div></div>
     <p class="hint">Para que una apuesta de TD tenga valor, el momio debe pagar más de lo que indica la probabilidad. Ejemplo: con 40% necesitas momio mayor a +150.</p>` : '<p class="hint">Sin candidatos todavía.</p>'}
 
-    <div class="card how" style="margin-top:18px"><h3>¿Por qué no hay moneyline ni totales?</h3>
+    <div class="card how" style="margin-top:18px"><h3>¿Por qué no hay moneyline y por qué las altas solo por tendencia?</h3>
       <ul><li><b>Moneyline:</b> en la prueba, los equipos que nuestro modelo veía con valor ganaron exactamente lo que el momio ya decía (42%). No hay ventaja que aprovechar.</li>
-      <li><b>Totales (más/menos puntos):</b> perdían 32%; el casino los calcula mucho mejor que nuestro modelo.</li>
+      <li><b>Altas y bajas con nuestro modelo:</b> perdían 32%; el casino calcula los puntos mucho mejor. Por eso solo se sugiere la tendencia histórica de las altas (53%), que es una ventaja mínima.</li>
       <li><b>Spreads:</b> nuestro modelo sí mostró ventaja (62% de acierto), aunque con pocos casos (50).</li>
       <li>Si el modelo difiere muchísimo del casino (más de 64%), descartamos la apuesta: casi siempre el casino sabe algo que nosotros no (lesión, cambio de rol).</li></ul></div>`;
 }

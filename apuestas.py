@@ -24,6 +24,9 @@ ENABLED = {"ml": False, "sp": True, "tot": False}   # ML: acertaba igual que el 
 CAL = {"ml": 0.0, "sp": 1.0, "tot": 0.5, "prop": 0.8}
 # props: solo "menos de" en recepciones y yardas por tierra (en 2026 los unders pegaron ~55% y nuestros overs perdian)
 PROP_SIDES = {"rec": ("under",), "ry": ("under",)}
+# altas y bajas: nuestro modelo de totales no sirve (acertaba 30-39%), pero en 2024-2026 las ALTAS
+# pegaron 53% (340-303). Se muestran todas las lineas con esa tendencia, marcada como ventaja minima.
+OVER_RATE = 0.529
 MIN_P_ML = 0.38         # no recomendar moneylines de muy poca probabilidad
 MIN_GAMES = 3           # juegos minimos del jugador para proyectar un prop
 MIN_LINE = {"py": 150, "ry": 25, "recy": 20, "rec": 2.5, "ptd": 0.5}   # solo lineas principales (las bajas pagan muy distinto a -110)
@@ -400,10 +403,38 @@ def summarize(items):
 
 # ------------------------------------------------------------------ main ---
 
+def target_week(games, current):
+    """Proxima jornada a apostar: la actual si aun le quedan la mitad o mas de sus partidos; si no, la siguiente."""
+    cur = [g for g in games if g["key"] == current]
+    pre = [g for g in cur if g["state"] == "pre"]
+    if cur and len(pre) * 2 >= len(cur):
+        return current
+    nxt = sorted({g["key"] for g in games if g["key"] > current})
+    return nxt[0] if nxt else current
+
+
+def totals_rows(week_games, market):
+    rows = []
+    for g in week_games:
+        mk = market.get(g["id"]) or {}
+        if mk.get("tot") is None:
+            continue
+        res = None
+        if g["final"]:
+            t = g["hs"] + g["as"]
+            res = "P" if t == mk["tot"] else "W" if t > mk["tot"] else "L"
+        rows.append({"gid": g["id"], "game": f"{g['away']['abbr']} @ {g['home']['abbr']}", "date": g["date"],
+                     "line": mk["tot"], "ov_o": mk.get("ov_o"), "un_o": mk.get("un_o"),
+                     "proj": round(g["pred"]["total"], 1), "p_over": OVER_RATE,
+                     "ev": round(OVER_RATE * dec(mk["ov_o"]) - 1, 3) if mk.get("ov_o") else None, "res": res})
+    return rows
+
+
 def build(season, games, weeks_out, market, extras, current, H, first_week=3):
     players = fetch_players(season, games, H)
-    cur_games = [g for g in games if g["key"] == current]
-    props = fetch_props(season, [g for g in games if g["final"] or g in cur_games], H)
+    target = target_week(games, current)
+    up_games = [g for g in games if g["key"] in (current, target)]
+    props = fetch_props(season, [g for g in games if g["final"] or g in up_games], H)
     names = {}
     for pl in players.values():
         for aid, p in pl.items():
@@ -415,7 +446,7 @@ def build(season, games, weeks_out, market, extras, current, H, first_week=3):
     hist_items = defaultdict(list)
     for w in weeks_out:
         k = w["key"]
-        if k < first_week or k > current:
+        if k < first_week or k > max(current, target):
             continue
         hist, dfn, lg = history_before(games, players, k)
         recs, tds, fav_legs_all = [], [], []
@@ -457,11 +488,17 @@ def build(season, games, weeks_out, market, extras, current, H, first_week=3):
             if gg and gg["final"]:
                 p = (players.get(t["gid"]) or {}).get(t["aid"])
                 t["res"] = None if p is None else ("W" if (p.get("rtd", 0) + p.get("rectd", 0)) > 0 else "L")
+        tots = totals_rows(w["games"], market)
+        for t in tots:
+            if t["res"] and t["ov_o"]:
+                src = "real" if t["gid"] in frozen else "sim"
+                hist_items[(src, "tot")].append((t["res"], t["ov_o"]))
         weeks[k] = {"recs": sorted(recs, key=lambda r: -r["ev"]), "parlays": parlays,
-                    "td": sorted(tds, key=lambda t: -t["p"])[:15]}
+                    "td": sorted(tds, key=lambda t: -t["p"])[:15], "totals": tots}
     H["save_json"](frozen_path, frozen)
     history = {f"{src}|{kind}": summarize(v) for (src, kind), v in hist_items.items()}
-    return {"weeks": weeks, "history": history,
+    # solo se publica el detalle de la proxima jornada; el historial resume todas las anteriores
+    return {"weeks": {target: weeks[target]} if target in weeks else {}, "target": target, "history": history,
             "params": {"min_ev": MIN_EV, "prop_odds": PROP_ODDS, "min_games": MIN_GAMES}}
 
 
